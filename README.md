@@ -19,14 +19,45 @@ Binärsensoren.
 
 Das Abfrageintervall beträgt standardmäßig 60 s und kann über **Konfigurieren**
 der Integration geändert werden (10–3600 s). Um einen weiteren Parameter
-hinzuzufügen, in `const.py` einen `SensorDef`/`BinarySensorDef` mit seiner
-`parameter_id` ergänzen und neu starten.
+hinzuzufügen, der nicht automatisch angelegt wird, in `const.py` einen
+`SensorDef`/`BinarySensorDef` mit seiner `parameter_id` ergänzen und neu
+starten.
 
-Die Komponente liest `http://<host>:<port><pfad>?area=values` und ordnet
-`payload[0]["value"][*]["values"][*]` zu `{parameterId: currentValue}` zu.
-Zusätzlich wird pro Zyklus `?area=informations` gelesen: liefert der Endpunkt
-ein nicht-leeres JSON-Objekt, ist der Binärsensor **Aerosmart Informationen**
-(Device Class `problem`) an.
+## Entitäten
+
+Beim Start liest die Integration Texte (`?area=languages`, in der Sprache von
+Home Assistant), Geräte (`?area=hardware`) und Parameter-Metadaten
+(`?area=options`, `betriebsart`, `tempconfig`) und legt daraus die Entitäten so
+an, wie sie das Web-Interface des Moduls zeigt:
+
+- **Fernwartungsmodul** (wie bisher): die bisherigen Sensoren und
+  Binärsensoren, dazu
+  - **Aerosmart Betriebsart** (Select), **Aerosmart Raum Soll** und
+    **Aerosmart Brauchwasser Soll** (Number) – die Bedienung des Dashboards,
+  - **Aerosmart Störung** (`?area=errors`) und **Aerosmart Informationen**
+    (`?area=informations`), Device Class `problem`, die Meldungstexte stehen
+    im Attribut `meldungen`.
+- **Aerosmart Wärmepumpe / Lüftung / Raumbediengerät**: eigene Geräte mit
+  Seriennummer und Softwareversion, je Gerät
+  - alle Werte des Statusbereichs als Sensor bzw. Binärsensor (Temperaturen,
+    Drehzahlen, Relaiskontakte, Anforderungen, Betriebsstunden, …),
+  - alle im Bereich „Betrieb“ änderbaren Einstellungen als Number, Select
+    oder Switch (Kategorie *Konfiguration*), z. B. Smart-Grid-Modus,
+    Heiz-/Kühlgrenze, Party-Dauer, CO₂-Zielwerte. Einstellungen, bei denen das
+    Gerät neu startet, sind standardmäßig deaktiviert. Werks-Reset und
+    „History löschen“ werden nie angeboten.
+
+Werte, die schon durch die bisherigen Sensoren abgedeckt sind, werden je Gerät
+deaktiviert angelegt. Melden mehrere Geräte denselben Parameter, verwenden die
+bisherigen Sensoren den neuesten Wert (höchste `rowId`).
+
+Schreiben erfolgt wie im Web-Interface per `POST <pfad>` mit
+`[{"parameterId", "deviceId", "value"}]`; danach wartet die Integration bis zu
+10 s, bis `?area=lastchanges` die Änderung bestätigt. Details zur API:
+[docs/API.md](docs/API.md).
+
+Pro Abfragezyklus werden `?area=values`, `?area=errors` und
+`?area=informations` gelesen.
 
 ## Lizenz
 

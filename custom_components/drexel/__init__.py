@@ -5,8 +5,9 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
-from .api import INFORMATIONS_QUERY, build_url
+from .api import build_base_url
 from .const import (
     CONF_HOST,
     CONF_PATH,
@@ -16,20 +17,23 @@ from .const import (
     SCAN_INTERVAL_SECONDS,
 )
 from .coordinator import DrexelCoordinator
+from .entity import hub_device_info
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SWITCH,
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = DrexelCoordinator(
         hass,
         entry,
-        build_url(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_PATH]),
-        build_url(
-            entry.data[CONF_HOST],
-            entry.data[CONF_PORT],
-            entry.data[CONF_PATH],
-            INFORMATIONS_QUERY,
+        build_base_url(
+            entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_PATH]
         ),
         entry.options.get(
             CONF_SCAN_INTERVAL,
@@ -37,6 +41,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ),
     )
     await coordinator.async_config_entry_first_refresh()
+    # The devices behind the module reference it via via_device.
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **hub_device_info(coordinator)
+    )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
