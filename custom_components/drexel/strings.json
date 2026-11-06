@@ -3,20 +3,37 @@
     "step": {
       "user": {
         "title": "Drexel und Weiss Aerosmart",
-        "description": "Die Integration verbindet sich mit dem Aerosmart-Fernwartungsmodul. Host, Port und Pfad des Moduls eingeben.",
+        "description": "Verbindet sich mit dem Fernwartungsmodul der Aerosmart. Gib die Adresse ein, unter der du das Web-Interface des Moduls im Browser öffnest.",
         "data": {
           "host": "Host",
-          "port": "Port",
-          "path": "Pfad",
           "scan_interval": "Abfrageintervall (Sekunden)"
+        },
+        "data_description": {
+          "host": "IP-Adresse oder Hostname, z. B. 192.168.1.50. Die Adresse des Web-Interfaces (http://192.168.1.50/home) geht auch.",
+          "scan_interval": "Wie oft Werte, Störungen und Informationen gelesen werden (10–3600 s)."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Erweitert",
+            "description": "Das Modul liefert seine Daten immer über Port 334 und Pfad /dw – das Web-Interface verwendet fest diese Werte. Nur ändern, wenn das Modul über eine Portweiterleitung oder einen Reverse-Proxy erreicht wird.",
+            "data": {
+              "port": "API-Port",
+              "path": "API-Pfad"
+            },
+            "data_description": {
+              "port": "Port der Daten-Schnittstelle (nicht der Port des Web-Interfaces). Standard: 334.",
+              "path": "Pfad der Daten-Schnittstelle, z. B. /dw → http://host:334/dw?area=values. Standard: /dw."
+            }
+          }
         }
       }
     },
     "error": {
-      "cannot_connect": "Der Werte-Endpunkt konnte nicht gelesen werden."
+      "cannot_connect": "Keine Antwort vom Fernwartungsmodul. Prüfe die Adresse und ob http://<host>:334/dw?area=values im Browser Daten liefert.",
+      "invalid_host": "Ungültige Adresse."
     },
     "abort": {
-      "already_configured": "Dieser Endpunkt ist bereits eingerichtet."
+      "already_configured": "Dieses Fernwartungsmodul ist bereits eingerichtet."
     }
   },
   "options": {
@@ -25,6 +42,9 @@
         "title": "Drexel und Weiss Aerosmart",
         "data": {
           "scan_interval": "Abfrageintervall (Sekunden)"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft Werte, Störungen und Informationen gelesen werden (10–3600 s)."
         }
       }
     }

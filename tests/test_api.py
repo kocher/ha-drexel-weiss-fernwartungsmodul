@@ -67,6 +67,22 @@ class TestApi(unittest.TestCase):
             "http://192.168.1.2:334/dw?area=informations",
         )
 
+    def test_normalize_host(self):
+        for text, host in (
+            ("192.168.169.41", "http://192.168.169.41"),
+            (" http://192.168.169.41/home ", "http://192.168.169.41"),
+            ("http://192.168.169.41:80/home", "http://192.168.169.41"),
+            ("https://aerosmart.example.org/", "https://aerosmart.example.org"),
+            ("aerosmart.local", "http://aerosmart.local"),
+            ("fe80::1", "http://[fe80::1]"),
+            ("", ""),
+        ):
+            self.assertEqual(api.normalize_host(text), host, text)
+        self.assertEqual(
+            api.build_url(api.normalize_host("http://192.168.169.41/home"), 334),
+            "http://192.168.169.41:334/dw?area=values",
+        )
+
     def test_has_informations(self):
         for empty in ({}, [], "", None, {"value": []}, [{"value": []}]):
             self.assertFalse(api.has_informations(empty), empty)

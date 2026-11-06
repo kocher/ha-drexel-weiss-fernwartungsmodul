@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
 DEFAULT_PATH = "/dw"
 QUERY = "area=values"
@@ -24,6 +25,25 @@ DANGEROUS_PARAMETERS = frozenset({6000, 6002})
 EXTRA_PARAMETERS = {
     1054: {"parameterName": "T_BOILER", "einheit": "°C", "divisor": 100, "komma": 1},
 }
+
+
+def normalize_host(text: str) -> str:
+    """Reduce what the user typed to scheme and host.
+
+    Accepts "192.168.1.2", "aerosmart.local" or the web UI address
+    ("http://192.168.1.2/home"); the port and path of the web UI are dropped,
+    the API has its own.
+    """
+    text = text.strip()
+    if "://" not in text:
+        if text.count(":") > 1 and not text.startswith("["):
+            text = f"[{text}]"  # bare IPv6 address
+        text = f"http://{text}"
+    parts = urlsplit(text)
+    host = parts.hostname or ""
+    if ":" in host:  # IPv6
+        host = f"[{host}]"
+    return f"{parts.scheme}://{host}" if host else ""
 
 
 def build_base_url(host: str, port: int, path: str = DEFAULT_PATH) -> str:
