@@ -43,6 +43,12 @@ an, wie sie das Web-Interface des Moduls zeigt:
   - **Betriebsart** (Select), **Raum-Soll** und **Brauchwasser** (Number) – die
     Bedienung des Dashboards – an dem Gerät, das den Wert meldet; die Sollwerte
     zusätzlich als Sensor für die Langzeitstatistik.
+- **Raum** (Climate, am Raumbediengerät): Raumtemperatur, Raum-Soll und die
+  Betriebsart als Preset, Heizen/Kühlen/Leerlauf aus dem WP-Betriebsstatus.
+  Einziger HVAC-Modus ist „Heizen“, da das Gerät keinen Heizungs-Ausschalter
+  hat.
+- **Brauchwasser** (Water Heater, an der Wärmepumpe): Boilertemperatur und
+  Brauchwasser-Soll; Zustand immer „Wärmepumpe“.
 - **Fernwartungsmodul**: **Störung** (`?area=errors`) und **Informationen**
   (`?area=informations`), Device Class `problem`, die Meldungstexte stehen im
   Attribut `meldungen`.

@@ -76,6 +76,40 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         self.owners: dict[int, int] = {}
         self._write_lock = asyncio.Lock()
 
+    def environment_parameter(self, parameter_id: int) -> Parameter | None:
+        """The environment-wide control of a parameter (e.g. Raum-Soll)."""
+        return next(
+            (
+                parameter
+                for parameter in self.parameters
+                if parameter.environment and parameter.parameter_id == parameter_id
+            ),
+            None,
+        )
+
+    def device_parameter(self, parameter_id: int) -> Parameter | None:
+        """Read-only parameter of the device that reports it most recently."""
+        candidates = [
+            parameter
+            for parameter in self.parameters
+            if parameter.parameter_id == parameter_id
+            and not parameter.environment
+            and not parameter.writable
+        ]
+        owner = self.owners.get(parameter_id)
+        return next(
+            (parameter for parameter in candidates if parameter.hardware_id == owner),
+            candidates[0] if candidates else None,
+        )
+
+    def raw_value(self, parameter: Parameter) -> Any:
+        """Current raw value; environment controls use the newest of all devices."""
+        if parameter.environment:
+            return self.data.values.get(parameter.parameter_id)
+        return self.data.devices.get(parameter.hardware_id, {}).get(
+            parameter.parameter_id
+        )
+
     def _area_url(self, area: str) -> str:
         return f"{self.base_url}?area={area}"
 
@@ -144,7 +178,8 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
                     "Änderung von %s wurde vom Fernwartungsmodul nicht bestätigt",
                     parameter.key,
                 )
-        await self.async_request_refresh()
+        # Confirmed (or given up): show the new value right away, not debounced.
+        await self.async_refresh()
 
     async def _async_get_json(self, url: str) -> Any:
         try:

@@ -38,6 +38,15 @@ def hardware_device_info(coordinator: DrexelCoordinator, hardware_id: int) -> De
     )
 
 
+def parameter_device_info(
+    coordinator: DrexelCoordinator, parameter: Parameter
+) -> DeviceInfo:
+    """Device a parameter is shown on; environment controls have one too."""
+    if parameter.device_id is None:
+        return hub_device_info(coordinator)
+    return hardware_device_info(coordinator, parameter.device_id)
+
+
 def parameter_unique_id(entry_id: str, parameter: Parameter) -> str:
     if parameter.environment:
         return f"{entry_id}_env{parameter.hardware_id}_{parameter.parameter_id}"
@@ -67,11 +76,7 @@ class DrexelParameterEntity(CoordinatorEntity[DrexelCoordinator]):
         self._attr_name = parameter.name
         self._attr_unique_id = parameter_unique_id(coordinator.entry.entry_id, parameter)
         # Environment controls are shown on the device that reports them.
-        self._attr_device_info = (
-            hub_device_info(coordinator)
-            if parameter.device_id is None
-            else hardware_device_info(coordinator, parameter.device_id)
-        )
+        self._attr_device_info = parameter_device_info(coordinator, parameter)
         if parameter.writable and not parameter.environment:
             # Settings that restart the device stay off until enabled.
             self._attr_entity_category = EntityCategory.CONFIG
@@ -87,12 +92,7 @@ class DrexelParameterEntity(CoordinatorEntity[DrexelCoordinator]):
 
     @property
     def raw_value(self) -> Any:
-        data = self.coordinator.data
-        if self.parameter.environment:
-            return data.values.get(self.parameter.parameter_id)
-        return data.devices.get(self.parameter.hardware_id, {}).get(
-            self.parameter.parameter_id
-        )
+        return self.coordinator.raw_value(self.parameter)
 
     @property
     def numeric_value(self) -> float | int:

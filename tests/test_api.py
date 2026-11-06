@@ -215,6 +215,15 @@ class TestMetadata(unittest.TestCase):
         )
 
 
+class TestClimate(unittest.TestCase):
+    def test_room_action(self):
+        self.assertIsNone(api.room_action(None))
+        self.assertEqual(api.room_action(0), "idle")  # Aus
+        self.assertEqual(api.room_action(2), "idle")  # Boilerladung
+        self.assertEqual(api.room_action(7), "heating")  # Niedertemperaturheizung
+        self.assertEqual(api.room_action(11), "cooling")  # Aktive Kühlung
+
+
 class TestDeviceValues(unittest.TestCase):
     PAYLOAD = [{"key": 100, "value": [
         {"hardwareId": 140, "values": [

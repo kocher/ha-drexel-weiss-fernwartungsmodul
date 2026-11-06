@@ -413,6 +413,24 @@ def build_parameters(
     return parameters
 
 
+# --- Climate ---------------------------------------------------------------
+
+# WP_BETRIEBSSTATUS (1346) values that heat or cool the rooms.
+ROOM_HEATING_STATES = frozenset({1, 3, 4, 6, 7, 8, 9, 12})
+ROOM_COOLING_STATES = frozenset({10, 11})
+
+
+def room_action(raw: Any) -> str | None:
+    """Map WP_BETRIEBSSTATUS to "heating", "cooling" or "idle"."""
+    if raw is None:
+        return None
+    if raw in ROOM_HEATING_STATES:
+        return "heating"
+    if raw in ROOM_COOLING_STATES:
+        return "cooling"
+    return "idle"
+
+
 # --- Errors and informations -----------------------------------------------
 
 

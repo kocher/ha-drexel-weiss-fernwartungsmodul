@@ -30,6 +30,8 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SWITCH,
+    Platform.CLIMATE,
+    Platform.WATER_HEATER,
 ]
 
 
@@ -60,21 +62,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 def _successor(
     coordinator: DrexelCoordinator, parameter_id: int, domain: str
 ) -> Parameter | None:
-    """Read-only per-device parameter that replaces a hand-written entity."""
-    candidates = [
-        parameter
-        for parameter in coordinator.parameters
-        if parameter.parameter_id == parameter_id
-        and not parameter.writable
-        and not parameter.environment
-        and domain == ("binary_sensor" if parameter.is_binary else "sensor")
-    ]
-    # Several devices report e.g. T_RAUM; the old entity showed the newest.
-    owner = coordinator.owners.get(parameter_id)
-    return next(
-        (parameter for parameter in candidates if parameter.hardware_id == owner),
-        candidates[0] if candidates else None,
-    )
+    """Read-only per-device parameter that replaces a hand-written entity.
+
+    Several devices report e.g. T_RAUM; the old entity showed the newest.
+    """
+    parameter = coordinator.device_parameter(parameter_id)
+    if parameter is None:
+        return None
+    if domain != ("binary_sensor" if parameter.is_binary else "sensor"):
+        return None
+    return parameter
 
 
 def _async_migrate_legacy_entities(
