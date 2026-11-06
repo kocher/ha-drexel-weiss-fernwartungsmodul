@@ -19,9 +19,9 @@ Binärsensoren.
 
 Das Abfrageintervall beträgt standardmäßig 60 s und kann über **Konfigurieren**
 der Integration geändert werden (10–3600 s). Um einen weiteren Parameter
-hinzuzufügen, der nicht automatisch angelegt wird, in `const.py` einen
-`SensorDef`/`BinarySensorDef` mit seiner `parameter_id` ergänzen und neu
-starten.
+hinzuzufügen, der nicht automatisch angelegt wird, in `api.py` unter
+`EXTRA_PARAMETERS` seine `parameterId` mit Einheit und Skalierung ergänzen und
+neu starten.
 
 ## Entitäten
 
@@ -30,26 +30,34 @@ Home Assistant), Geräte (`?area=hardware`) und Parameter-Metadaten
 (`?area=options`, `betriebsart`, `tempconfig`) und legt daraus die Entitäten so
 an, wie sie das Web-Interface des Moduls zeigt:
 
-- **Fernwartungsmodul** (wie bisher): die bisherigen Sensoren und
-  Binärsensoren, dazu
-  - **Aerosmart Betriebsart** (Select), **Aerosmart Raum Soll** und
-    **Aerosmart Brauchwasser Soll** (Number) – die Bedienung des Dashboards,
-  - **Aerosmart Störung** (`?area=errors`) und **Aerosmart Informationen**
-    (`?area=informations`), Device Class `problem`, die Meldungstexte stehen
-    im Attribut `meldungen`.
 - **Aerosmart Wärmepumpe / Lüftung / Raumbediengerät**: eigene Geräte mit
   Seriennummer und Softwareversion, je Gerät
   - alle Werte des Statusbereichs als Sensor bzw. Binärsensor (Temperaturen,
-    Drehzahlen, Relaiskontakte, Anforderungen, Betriebsstunden, …),
+    Drehzahlen, Relaiskontakte, Anforderungen, Betriebsstunden, …), dazu
+    **Boiler** (`T_BOILER`) an der Wärmepumpe,
   - alle im Bereich „Betrieb“ änderbaren Einstellungen als Number, Select
     oder Switch (Kategorie *Konfiguration*), z. B. Smart-Grid-Modus,
     Heiz-/Kühlgrenze, Party-Dauer, CO₂-Zielwerte. Einstellungen, bei denen das
     Gerät neu startet, sind standardmäßig deaktiviert. Werks-Reset und
-    „History löschen“ werden nie angeboten.
+    „History löschen“ werden nie angeboten,
+  - **Betriebsart** (Select), **Raum-Soll** und **Brauchwasser** (Number) – die
+    Bedienung des Dashboards – an dem Gerät, das den Wert meldet; die Sollwerte
+    zusätzlich als Sensor für die Langzeitstatistik.
+- **Fernwartungsmodul**: **Störung** (`?area=errors`) und **Informationen**
+  (`?area=informations`), Device Class `problem`, die Meldungstexte stehen im
+  Attribut `meldungen`.
 
-Werte, die schon durch die bisherigen Sensoren abgedeckt sind, werden je Gerät
-deaktiviert angelegt. Melden mehrere Geräte denselben Parameter, verwenden die
-bisherigen Sensoren den neuesten Wert (höchste `rowId`).
+Zahlenwerte, die das Modul nicht meldet, werden wie im Web-Interface als 0
+angezeigt.
+
+### Umstieg von Version 0.0.7 und älter
+
+Die früheren, fest programmierten Entitäten („Aerosmart Boiler“, „Aerosmart
+Raum“, …) gibt es nicht mehr. Beim ersten Start übernimmt jeweils die
+entsprechende Entität des Geräts ihren Registry-Eintrag: die `entity_id` bleibt
+gleich, damit auch Verlauf, Langzeitstatistik, Automationen und Dashboards.
+Nur Name und Gerät ändern sich (z. B. `sensor.aerosmart_boiler` heißt jetzt
+„Aerosmart Wärmepumpe Boiler“).
 
 Schreiben erfolgt wie im Web-Interface per `POST <pfad>` mit
 `[{"parameterId", "deviceId", "value"}]`; danach wartet die Integration bis zu

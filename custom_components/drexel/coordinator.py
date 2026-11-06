@@ -26,6 +26,7 @@ from .api import (
     has_informations,
     index_languages,
     language_code,
+    newest_owners,
     newest_row,
     parse_device_values,
     parse_hardware,
@@ -72,6 +73,7 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         self.texts: dict[int, Text] = {}
         self.hardware: dict[int, Hardware] = {}
         self.parameters: list[Parameter] = []
+        self.owners: dict[int, int] = {}
         self._write_lock = asyncio.Lock()
 
     def _area_url(self, area: str) -> str:
@@ -88,7 +90,11 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         options = await self._async_get_json(self._area_url("options"))
         betriebsart = await self._async_get_json(self._area_url("betriebsart"))
         tempconfig = await self._async_get_json(self._area_url("tempconfig"))
-        self.parameters = build_parameters(options, [betriebsart, tempconfig], self.texts)
+        values = await self._async_get_json(self._area_url("values"))
+        self.owners = newest_owners(values)
+        self.parameters = build_parameters(
+            options, [betriebsart, tempconfig], self.texts, self.owners
+        )
 
     async def _async_update_data(self) -> DrexelData:
         values_payload = await self._async_get_json(self._area_url("values"))

@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import Message, Parameter
-from .const import BINARY_SENSORS, DEVICE_LABELS, DOMAIN, BinarySensorDef
+from .const import DEVICE_LABELS, DOMAIN
 from .coordinator import DrexelCoordinator
 from .entity import DrexelEntity, DrexelParameterEntity
 
@@ -32,29 +32,13 @@ async def async_setup_entry(
 ) -> None:
     coordinator: DrexelCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        [DrexelBinarySensor(coordinator, desc) for desc in BINARY_SENSORS]
-        + [DrexelInformationSensor(coordinator), DrexelErrorSensor(coordinator)]
+        [DrexelInformationSensor(coordinator), DrexelErrorSensor(coordinator)]
         + [
             DrexelParameterBinarySensor(coordinator, parameter)
             for parameter in coordinator.parameters
             if not parameter.writable and parameter.is_binary
         ]
     )
-
-
-class DrexelBinarySensor(DrexelEntity, BinarySensorEntity):
-    """On/off requirement signal of the heat pump."""
-
-    def __init__(
-        self, coordinator: DrexelCoordinator, description: BinarySensorDef
-    ) -> None:
-        super().__init__(coordinator, description.parameter_id, description.name)
-        self._attr_device_class = description.device_class
-
-    @property
-    def is_on(self) -> bool | None:
-        value = self._raw_value
-        return None if value is None else bool(value)
 
 
 def _message_attributes(
@@ -75,7 +59,7 @@ class DrexelInformationSensor(DrexelEntity, BinarySensorEntity):
     """On when the module reports informations (problems)."""
 
     def __init__(self, coordinator: DrexelCoordinator) -> None:
-        super().__init__(coordinator, "informations", "Aerosmart Informationen")
+        super().__init__(coordinator, "informations", "Informationen")
         self._attr_device_class = BinarySensorDeviceClass.PROBLEM
 
     @property
@@ -91,7 +75,7 @@ class DrexelErrorSensor(DrexelEntity, BinarySensorEntity):
     """On when the module reports active faults (area=errors)."""
 
     def __init__(self, coordinator: DrexelCoordinator) -> None:
-        super().__init__(coordinator, "errors", "Aerosmart Störung")
+        super().__init__(coordinator, "errors", "Störung")
         self._attr_device_class = BinarySensorDeviceClass.PROBLEM
 
     @property

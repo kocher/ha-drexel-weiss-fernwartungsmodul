@@ -19,6 +19,12 @@ BEREICH_BETRIEB = 3
 # Never offered as entities: factory reset and clearing the fault history.
 DANGEROUS_PARAMETERS = frozenset({6000, 6002})
 
+# Reported in area=values but in no menu of the web UI; added as read-only
+# parameters of the device that reports them.
+EXTRA_PARAMETERS = {
+    1054: {"parameterName": "T_BOILER", "einheit": "°C", "divisor": 100, "komma": 1},
+}
+
 
 def build_base_url(host: str, port: int, path: str = DEFAULT_PATH) -> str:
     """Build the API URL (without area) from the user config."""
@@ -101,6 +107,23 @@ def newest_row(payload: Any, parameter_id: int, hardware_id: int | None = None) 
     return max(rows, default=-1)
 
 
+def newest_owners(payload: Any) -> dict[int, int]:
+    """Return {parameterId: hardwareId} of the device with the newest row."""
+    newest: dict[int, tuple[int, int]] = {}
+    for device in _device_blocks(payload):
+        hardware_id = device.get("hardwareId")
+        if hardware_id is None:
+            continue
+        for item in device.get("values") or []:
+            if not isinstance(item, dict) or item.get("parameterId") is None:
+                continue
+            row_id = item.get("rowId") or 0
+            parameter_id = item["parameterId"]
+            if parameter_id not in newest or row_id >= newest[parameter_id][0]:
+                newest[parameter_id] = (row_id, hardware_id)
+    return {parameter_id: owner for parameter_id, (_, owner) in newest.items()}
+
+
 def write_body(parameter_id: int, device_id: int, raw: int) -> list[dict[str, int]]:
     """Body for ``POST /dw``; deviceId is a hardwareId or an environment key."""
     return [{"parameterId": parameter_id, "deviceId": device_id, "value": raw}]
@@ -117,17 +140,6 @@ def has_informations(payload: Any) -> bool:
     if isinstance(payload, (list, tuple)):
         return any(has_informations(item) for item in payload)
     return bool(payload)
-
-
-def convert_value(
-    value: Any, *, scale: float = 1, states: dict[int, str] | None = None
-) -> Any:
-    """Turn a raw currentValue into a sensor state."""
-    if value is None:
-        return None
-    if states is not None:
-        return states.get(value, "Unbekannt")
-    return value / scale if scale != 1 else value
 
 
 # --- Texts -----------------------------------------------------------------
@@ -225,7 +237,8 @@ class Parameter:
     """Metadata of one parameter, taken from a Feature object of the module.
 
     ``hardware_id`` is the owning device, or the environment key (e.g. 100)
-    for environment-wide controls such as the operating mode.
+    for environment-wide controls such as the operating mode. ``device_id``
+    is the device the entity is shown on (None: the module itself).
     """
 
     hardware_id: int
@@ -242,6 +255,7 @@ class Parameter:
     writable: bool = False
     restart: bool = False
     environment: bool = False
+    device_id: int | None = None
 
     @property
     def scale(self) -> int:
@@ -275,6 +289,7 @@ def _parameter(
     *,
     writable: bool,
     environment: bool = False,
+    device_id: int | None = None,
 ) -> Parameter:
     parameter_id = feature["parameterId"]
     text = texts.get(parameter_id, Text("", {}))
@@ -308,6 +323,7 @@ def _parameter(
         writable=writable,
         restart=bool(feature.get("restarOnChange")),
         environment=environment,
+        device_id=device_id,
     )
 
 
@@ -315,14 +331,19 @@ def build_parameters(
     options_payload: Any,
     environment_payloads: list[Any],
     texts: dict[int, Text],
+    owners: dict[int, int] | None = None,
 ) -> list[Parameter]:
     """Collect the parameters the web UI shows to a user.
 
     - ``environment_payloads`` (``betriebsart``, ``tempconfig``): environment
-      wide controls, written with the environment key as deviceId.
+      wide controls, written with the environment key as deviceId and shown
+      on the device that reports them (``owners``, see newest_owners).
     - ``options``: per device, everything of the status area (read only) and
-      everything editable in the operating area (Betrieb).
+      everything editable in the operating area (Betrieb). Settings that are
+      also environment controls stay read only here.
+    - ``EXTRA_PARAMETERS``: read only, on the device that reports them.
     """
+    owners = owners or {}
     parameters: list[Parameter] = []
     seen: set[tuple[int, int]] = set()
     environment_ids: set[int] = set()
@@ -338,7 +359,14 @@ def build_parameters(
                     continue
                 environment_ids.add(parameter_id)
                 parameters.append(
-                    _parameter(feature, owner, texts, writable=True, environment=True)
+                    _parameter(
+                        feature,
+                        owner,
+                        texts,
+                        writable=True,
+                        environment=True,
+                        device_id=owners.get(parameter_id),
+                    )
                 )
 
     for device in _device_blocks(options_payload):
@@ -347,7 +375,7 @@ def build_parameters(
             parameter_id = feature.get("parameterId")
             if parameter_id is None or parameter_id in DANGEROUS_PARAMETERS:
                 continue
-            if parameter_id in environment_ids or (hardware_id, parameter_id) in seen:
+            if (hardware_id, parameter_id) in seen:
                 continue
             areas = {
                 area.get("bereichBit"): area
@@ -358,7 +386,29 @@ def build_parameters(
             if not writable and BEREICH_STATUS not in areas:
                 continue
             seen.add((hardware_id, parameter_id))
-            parameters.append(_parameter(feature, hardware_id, texts, writable=writable))
+            parameters.append(
+                _parameter(
+                    feature,
+                    hardware_id,
+                    texts,
+                    writable=writable and parameter_id not in environment_ids,
+                    device_id=hardware_id,
+                )
+            )
+
+    for parameter_id, feature in EXTRA_PARAMETERS.items():
+        owner = owners.get(parameter_id)
+        if owner is None or (owner, parameter_id) in seen:
+            continue
+        parameters.append(
+            _parameter(
+                {"parameterId": parameter_id, **feature},
+                owner,
+                texts,
+                writable=False,
+                device_id=owner,
+            )
+        )
 
     return parameters
 

@@ -58,14 +58,6 @@ class TestApi(unittest.TestCase):
         with self.assertRaises(ValueError):
             api.parse_values({"foo": "bar"})
 
-    def test_convert_value(self):
-        self.assertEqual(api.convert_value(23456, scale=1000), 23.456)
-        self.assertEqual(
-            api.convert_value(8, states={8: "Wärmepumpe ein"}), "Wärmepumpe ein"
-        )
-        self.assertEqual(api.convert_value(99, states={8: "x"}), "Unbekannt")
-        self.assertIsNone(api.convert_value(None))
-
     def test_build_url(self):
         self.assertEqual(
             api.build_url("192.168.1.2", 334), "http://192.168.1.2:334/dw?area=values"
@@ -130,9 +122,12 @@ TEMPCONFIG = [{"key": 100, "value": [_feature(
 class TestMetadata(unittest.TestCase):
     def setUp(self):
         self.texts = api.index_languages(LANGUAGES, "EN")
+        self.owners = {5002: 120, 5016: 120, 1054: 140}
         self.parameters = {
             (p.hardware_id, p.parameter_id): p
-            for p in api.build_parameters(OPTIONS, [BETRIEBSART, TEMPCONFIG], self.texts)
+            for p in api.build_parameters(
+                OPTIONS, [BETRIEBSART, TEMPCONFIG], self.texts, self.owners
+            )
         }
 
     def test_language_fallback_and_cleanup(self):
@@ -145,10 +140,28 @@ class TestMetadata(unittest.TestCase):
     def test_selection(self):
         self.assertEqual(
             set(self.parameters),
-            {(100, 5002), (100, 5016), (140, 200), (140, 5510), (140, 5500)},
+            {
+                (100, 5002), (100, 5016), (140, 200), (140, 5510), (140, 5500),
+                (140, 5016), (140, 1054),
+            },
         )
         self.assertTrue(self.parameters[(100, 5016)].environment)
         self.assertFalse(self.parameters[(140, 200)].writable)
+
+    def test_devices(self):
+        # Environment controls go to the device that reports them.
+        self.assertEqual(self.parameters[(100, 5002)].device_id, 120)
+        self.assertEqual(self.parameters[(140, 200)].device_id, 140)
+        # A per-device copy of an environment control stays read only.
+        self.assertFalse(self.parameters[(140, 5016)].writable)
+
+    def test_extra_parameters(self):
+        boiler = self.parameters[(140, 1054)]
+        self.assertEqual(boiler.key, "T_BOILER")
+        self.assertFalse(boiler.writable)
+        self.assertAlmostEqual(boiler.to_native(55051), 55.051)
+        without_owner = api.build_parameters(OPTIONS, [], self.texts, {})
+        self.assertNotIn(1054, [p.parameter_id for p in without_owner])
 
     def test_writable_options(self):
         mode = self.parameters[(100, 5002)]
@@ -201,6 +214,10 @@ class TestDeviceValues(unittest.TestCase):
             api.parse_device_values(self.PAYLOAD),
             {140: {1054: 55051}, 120: {1054: 51246}},
         )
+
+    def test_newest_owners(self):
+        self.assertEqual(api.newest_owners(self.PAYLOAD), {1054: 140})
+        self.assertEqual(api.newest_owners({}), {})
 
     def test_newest_row(self):
         self.assertEqual(api.newest_row(self.PAYLOAD, 1054), 6465)
