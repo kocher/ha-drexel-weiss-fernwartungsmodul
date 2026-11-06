@@ -86,6 +86,8 @@ LANGUAGES = [
      "units": [{"index": 0, "text": "EVU-Sperre"}, {"index": 1, "text": "Aus"}]},
     {"countryCode": "DE", "parameterId": 7500, "name": "Summenstörung 2",
      "units": [{"index": 0, "text": ""}, {"index": 1, "text": "Filter tauschen"}]},
+    {"countryCode": "DE", "parameterId": 7002, "name": "Grobstaubfilter wechseln!",
+     "units": [{"index": 0, "text": "Nein"}, {"index": 1, "text": "Ja"}]},
     {"countryCode": "DE", "parameterId": 5000, "name": "Gerätetyp",
      "units": [{"index": 5, "text": "aerosmart m"}]},
 ]
@@ -196,9 +198,21 @@ class TestMetadata(unittest.TestCase):
         payload = [{"key": 100, "value": [{"hardwareId": 130, "parameterId": 7500}]}]
         (message,) = api.parse_messages(payload, self.texts)
         self.assertEqual(message.hardware_id, 130)
-        self.assertEqual(message.text, "Summenstörung 2: Filter tauschen")
+        self.assertEqual(message.text, "Summenstörung 2")
         self.assertEqual(api.parse_messages([], self.texts), [])
         self.assertEqual(api.parse_messages({}, self.texts), [])
+
+    def test_real_informations_response(self):
+        # GET ?area=informations while the coarse filter was due.
+        payload = [{"key": 100, "identifier": "fd3ab24d3e104432bc97360ba2e23997",
+                    "value": [{"hardwareId": 130, "parameterId": 7002, "text": None,
+                               "valueText": None, "hardwareEnvironment": 100}],
+                    "ticks": 639288294421615703}]
+        self.assertTrue(api.has_informations(payload))
+        self.assertEqual(
+            api.parse_messages(payload, self.texts),
+            [api.Message(130, 7002, "Grobstaubfilter wechseln!")],
+        )
 
 
 class TestDeviceValues(unittest.TestCase):

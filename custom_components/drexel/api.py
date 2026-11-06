@@ -426,9 +426,10 @@ class Message:
 
 
 def parse_messages(payload: Any, texts: dict[int, Text]) -> list[Message]:
-    """Parse ``area=errors`` / ``area=informations`` like the web UI does.
+    """Parse ``area=errors`` / ``area=informations``.
 
-    The text is the parameter name plus the option text with index 1.
+    The text is the parameter name. The web UI also shows the option text
+    with index 1 ("Ja", "vorhanden"), which adds nothing for an active message.
     """
     messages = []
     for item in _device_blocks(payload):
@@ -436,11 +437,6 @@ def parse_messages(payload: Any, texts: dict[int, Text]) -> list[Message]:
         if parameter_id is None:
             continue
         text = texts.get(parameter_id)
-        if text is None:
-            label = str(parameter_id)
-        else:
-            label = text.name or str(parameter_id)
-            if text.options.get(1):
-                label = f"{label}: {text.options[1]}"
+        label = text.name if text is not None and text.name else str(parameter_id)
         messages.append(Message(item.get("hardwareId"), parameter_id, label))
     return messages
