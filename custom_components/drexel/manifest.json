@@ -8,5 +8,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/kocher/ha-drexel-weiss-fernwartungsmodul/issues",
   "requirements": [],
-  "version": "0.0.9"
+  "version": "0.0.10"
 }
