@@ -43,8 +43,8 @@ class DrexelNumber(DrexelParameterEntity, NumberEntity):
         self._attr_native_step = parameter.to_native(parameter.step)
 
     @property
-    def native_value(self) -> float | None:
-        return self.parameter.to_native(self.raw_value)
+    def native_value(self) -> float | int:
+        return self.numeric_value
 
     async def async_set_native_value(self, value: float) -> None:
         await self.async_write_raw(self.parameter.to_raw(value))

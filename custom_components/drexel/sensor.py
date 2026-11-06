@@ -82,4 +82,4 @@ class DrexelParameterSensor(DrexelParameterEntity, SensorEntity):
     def native_value(self):
         if self.parameter.options:
             return self.parameter.option_text(self.raw_value)
-        return self.parameter.to_native(self.raw_value)
+        return self.numeric_value

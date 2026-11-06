@@ -105,5 +105,11 @@ class DrexelParameterEntity(CoordinatorEntity[DrexelCoordinator]):
             self.parameter.parameter_id
         )
 
+    @property
+    def numeric_value(self) -> float | int:
+        """Display value; 0 when the module doesn't report it, like the web UI."""
+        raw = self.raw_value
+        return self.parameter.to_native(0 if raw is None else raw)
+
     async def async_write_raw(self, raw: int) -> None:
         await self.coordinator.async_write(self.parameter, raw)
