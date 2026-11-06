@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Drexel und Weiss Aerosmart",
+        "description": "Die Integration verbindet sich mit dem Aerosmart-Fernwartungsmodul. Host, Port und Pfad des Moduls eingeben.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "path": "Pfad",
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Der Werte-Endpunkt konnte nicht gelesen werden."
+    },
+    "abort": {
+      "already_configured": "Dieser Endpunkt ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Drexel und Weiss Aerosmart",
+        "data": {
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        }
+      }
+    }
+  }
+}
