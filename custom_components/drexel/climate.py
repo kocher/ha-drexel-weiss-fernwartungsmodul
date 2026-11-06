@@ -12,7 +12,7 @@ from homeassistant.components.climate import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -67,8 +67,20 @@ class DrexelClimate(CoordinatorEntity[DrexelCoordinator], ClimateEntity):
         self._presets: dict[str, int] = {}
         if self._preset is not None and self._preset.options:
             self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
-            self._presets = {text: index for index, text in self._preset.options.items()}
-            self._attr_preset_modes = list(self._presets)
+            self._update_presets()
+
+    def _update_presets(self) -> None:
+        # A mode that can't be chosen (e.g. Ferien) is listed while active.
+        if self._preset is None or not self._preset.options:
+            return
+        choices = self._preset.choices(self._value(self._preset))
+        self._presets = {text: index for index, text in choices.items()}
+        self._attr_preset_modes = list(self._presets)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_presets()
+        super()._handle_coordinator_update()
 
     def _value(self, parameter: Parameter | None) -> Any:
         return None if parameter is None else self.coordinator.raw_value(parameter)

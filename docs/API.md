@@ -123,7 +123,7 @@ Selection relevant for Home Assistant:
 
 | dev | id   | name                      | range / options                              | div / komma |
 |-----|------|---------------------------|----------------------------------------------|-------------|
-| env | 5002 | Betriebsart `E_MODUS_WLG` | 0–3 Manuell Stufe 0–3, 4 Automatik, 5 Party, 6 Ferien, 7 Reinigung | 1/0 |
+| env | 5002 | Betriebsart `E_MODUS_WLG` | 0–3 Manuell Stufe 0–3, 4 Automatik, 5 Party (6 Ferien, 7 Reinigung exist, but the web UI only offers index < 6) | 1/0 |
 | env | 5016 | Raum Soll `E_RAUM_SOLL`   | 14000–26000 step 100, °C                     | 100/1       |
 | 140 | 5064 | Brauchwasser Soll         | 20000–55000 step 1000, °C                    | 1000/0      |
 | 140 | 5624 | Modus Smart Grid          | kein; PV; Niedertarif; PV oder Niedertarif   | 1/0         |
@@ -141,6 +141,10 @@ Selection relevant for Home Assistant:
 
 The full list (≈50 parameters, including installer-level ones) is in
 `options` → `displays[]` with `bereiche[].bereichBit == 3 && isEditEnabled`.
+
+Which device reports an environment parameter with the newest `rowId`
+changes over time (5002 came from the RBG-TP in the morning, from the LU in
+the evening), so it is not suitable for deciding where to show it.
 
 ## Merging values across devices
 

@@ -26,7 +26,7 @@ from .api import (
     has_informations,
     index_languages,
     language_code,
-    newest_owners,
+    parameter_owners,
     newest_row,
     parse_device_values,
     parse_hardware,
@@ -125,7 +125,7 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         betriebsart = await self._async_get_json(self._area_url("betriebsart"))
         tempconfig = await self._async_get_json(self._area_url("tempconfig"))
         values = await self._async_get_json(self._area_url("values"))
-        self.owners = newest_owners(values)
+        self.owners = parameter_owners(values, list(self.hardware.values()))
         self.parameters = build_parameters(
             options, [betriebsart, tempconfig], self.texts, self.owners
         )

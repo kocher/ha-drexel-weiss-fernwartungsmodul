@@ -93,7 +93,8 @@ class TestApi(unittest.TestCase):
 LANGUAGES = [
     {"countryCode": "DE", "parameterId": 5002, "name": "Betriebsart",
      "units": [{"index": i, "text": t} for i, t in enumerate(
-         ["Manuell Stufe 0", "Manuell Stufe 1", "Automatikbetrieb", "Party"])]},
+         ["Manuell Stufe 0", "Manuell Stufe 1", "Automatikbetrieb", "Party",
+          "x", "y", "Ferien", "Reinigung"])]},
     {"countryCode": "EN", "parameterId": 5002, "name": "Operating mode", "units": []},
     {"countryCode": "DE", "parameterId": 5016, "name": "Raum-Soll", "units": []},
     {"countryCode": "DE", "parameterId": 5510, "name": "Heizungssperre \\Sommer",
@@ -183,11 +184,26 @@ class TestMetadata(unittest.TestCase):
 
     def test_writable_options(self):
         mode = self.parameters[(100, 5002)]
-        self.assertEqual(mode.options, {0: "Manuell Stufe 0", 2: "Automatikbetrieb", 3: "Party"})
+        self.assertEqual(
+            mode.options,
+            {0: "Manuell Stufe 0", 2: "Automatikbetrieb", 3: "Party", 4: "x", 5: "y"},
+        )
         self.assertTrue(self.parameters[(140, 5510)].is_binary)
         external = self.parameters[(140, 5500)]
         self.assertFalse(external.writable)
         self.assertEqual(external.options, {0: "EVU-Sperre", 1: "Aus"})
+
+    def test_hidden_options(self):
+        # Ferien/Reinigung are not offered, like in the web UI ...
+        mode = self.parameters[(100, 5002)]
+        self.assertNotIn(6, mode.options)
+        self.assertNotIn(7, mode.options)
+        self.assertEqual(mode.choices(2), mode.options)
+        # ... but shown while active (set on the room panel).
+        self.assertEqual(mode.option_text(6), "Ferien")
+        self.assertEqual(mode.choices(6), {**mode.options, 6: "Ferien"})
+        self.assertEqual(mode.choices(None), mode.options)
+        self.assertEqual(mode.choices(99), mode.options)
 
     def test_scaling(self):
         setpoint = self.parameters[(100, 5016)]
@@ -257,6 +273,32 @@ class TestDeviceValues(unittest.TestCase):
     def test_newest_owners(self):
         self.assertEqual(api.newest_owners(self.PAYLOAD), {1054: 140})
         self.assertEqual(api.newest_owners({}), {})
+
+    def test_parameter_owners(self):
+        payload = [{"key": 100, "value": [
+            {"hardwareId": 130, "values": [
+                {"rowId": 8567, "parameterId": 5002, "currentValue": 2},
+                {"rowId": 900, "parameterId": 200, "currentValue": 21166}]},
+            {"hardwareId": 120, "values": [
+                {"rowId": 49, "parameterId": 5002, "currentValue": 2},
+                {"rowId": 950, "parameterId": 1054, "currentValue": 51246},
+                {"rowId": 100, "parameterId": 200, "currentValue": 21038}]},
+            {"hardwareId": 140, "values": [
+                {"rowId": 600, "parameterId": 1054, "currentValue": 55051}]},
+        ]}]
+        hardware = [
+            api.Hardware(120, "RBG-TP", "RBG-TP", None, None),
+            api.Hardware(130, "LU", "LU", None, None),
+            api.Hardware(140, "WP", "WP", None, None),
+        ]
+        owners = api.parameter_owners(payload, hardware)
+        # fixed placement even though another device has the newest value
+        self.assertEqual(owners[5002], 120)
+        self.assertEqual(owners[1054], 140)
+        # everything else: newest value
+        self.assertEqual(owners[200], 130)
+        # no room panel: fall back to the newest value
+        self.assertEqual(api.parameter_owners(payload, hardware[1:])[5002], 130)
 
     def test_newest_row(self):
         self.assertEqual(api.newest_row(self.PAYLOAD, 1054), 6465)

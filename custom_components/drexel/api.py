@@ -20,6 +20,11 @@ BEREICH_BETRIEB = 3
 # Never offered as entities: factory reset and clearing the fault history.
 DANGEROUS_PARAMETERS = frozenset({6000, 6002})
 
+# Options the web UI never offers although the metadata allows them: for the
+# operating mode it only shows indexes below 6, i.e. not Ferien (6) and
+# Reinigung (7).
+HIDDEN_OPTIONS = {5002: frozenset({6, 7})}
+
 # Reported in area=values but in no menu of the web UI; added as read-only
 # parameters of the device that reports them.
 EXTRA_PARAMETERS = {
@@ -249,6 +254,45 @@ def parse_hardware(payload: Any, texts: dict[int, Text]) -> list[Hardware]:
     return devices
 
 
+# Device a parameter reported by several devices is shown on, by hardware
+# name. The device with the newest value changes over time, so it can't be
+# used for this (for EXTRA_PARAMETERS it is even part of the unique id).
+PLACEMENT = {
+    5002: ("RBG-TP", "RBG-V/H"),  # Betriebsart
+    5016: ("RBG-TP", "RBG-V/H"),  # Raum-Soll
+    5064: ("WP",),  # Brauchwasser-Soll
+    1054: ("WP",),  # T_BOILER
+}
+
+
+def parameter_owners(payload: Any, hardware: list[Hardware]) -> dict[int, int]:
+    """Return {parameterId: hardwareId} of the device to show a parameter on.
+
+    PLACEMENT where a matching device reports the parameter, otherwise the
+    device with the newest value.
+    """
+    owners = newest_owners(payload)
+    reported = {
+        (device.get("hardwareId"), item.get("parameterId"))
+        for device in _device_blocks(payload)
+        for item in device.get("values") or []
+        if isinstance(item, dict)
+    }
+    for parameter_id, names in PLACEMENT.items():
+        owner = next(
+            (
+                device.hardware_id
+                for name in names
+                for device in sorted(hardware, key=lambda device: device.hardware_id)
+                if device.name == name and (device.hardware_id, parameter_id) in reported
+            ),
+            None,
+        )
+        if owner is not None:
+            owners[parameter_id] = owner
+    return owners
+
+
 # --- Parameters ------------------------------------------------------------
 
 
@@ -259,6 +303,8 @@ class Parameter:
     ``hardware_id`` is the owning device, or the environment key (e.g. 100)
     for environment-wide controls such as the operating mode. ``device_id``
     is the device the entity is shown on (None: the module itself).
+    ``options`` are the values that can be chosen, ``labels`` the texts of
+    all values (also those that can't be chosen).
     """
 
     hardware_id: int
@@ -276,6 +322,7 @@ class Parameter:
     restart: bool = False
     environment: bool = False
     device_id: int | None = None
+    labels: dict[int, str] = field(default_factory=dict)
 
     @property
     def scale(self) -> int:
@@ -299,7 +346,18 @@ class Parameter:
         return max(self.minimum, min(self.maximum, raw))
 
     def option_text(self, raw: Any) -> str | None:
-        return self.options.get(raw) if raw is not None else None
+        if raw is None:
+            return None
+        return self.options.get(raw) or self.labels.get(raw)
+
+    def choices(self, raw: Any) -> dict[int, str]:
+        """Options to offer; includes the current value if it can't be chosen.
+
+        E.g. Ferien set on the room panel stays visible as the current mode.
+        """
+        if raw in self.options or raw not in self.labels:
+            return self.options
+        return {**self.options, raw: self.labels[raw]}
 
 
 def _parameter(
@@ -319,6 +377,7 @@ def _parameter(
     if writable and options:
         # The web UI only offers options in range that are not invalid.
         invalid = set(feature.get("invalidOptionsIndex") or [])
+        invalid |= HIDDEN_OPTIONS.get(parameter_id, frozenset())
         allowed = {
             index: option
             for index, option in options.items()
@@ -340,6 +399,7 @@ def _parameter(
         maximum=maximum,
         step=max(int(feature.get("schritte") or 1), 1),
         options=options,
+        labels=text.options,
         writable=writable,
         restart=bool(feature.get("restarOnChange")),
         environment=environment,
@@ -357,7 +417,7 @@ def build_parameters(
 
     - ``environment_payloads`` (``betriebsart``, ``tempconfig``): environment
       wide controls, written with the environment key as deviceId and shown
-      on the device that reports them (``owners``, see newest_owners).
+      on the device that reports them (``owners``, see parameter_owners).
     - ``options``: per device, everything of the status area (read only) and
       everything editable in the operating area (Betrieb). Settings that are
       also environment controls stay read only here.

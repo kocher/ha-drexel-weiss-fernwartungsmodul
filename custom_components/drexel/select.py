@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -32,8 +32,18 @@ class DrexelSelect(DrexelParameterEntity, SelectEntity):
 
     def __init__(self, coordinator: DrexelCoordinator, parameter: Parameter) -> None:
         super().__init__(coordinator, parameter)
-        self._indexes = {text: index for index, text in parameter.options.items()}
+        self._update_options()
+
+    def _update_options(self) -> None:
+        # A value that can't be chosen (e.g. Ferien) is listed while active.
+        choices = self.parameter.choices(self.raw_value)
+        self._indexes = {text: index for index, text in choices.items()}
         self._attr_options = list(self._indexes)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_options()
+        super()._handle_coordinator_update()
 
     @property
     def current_option(self) -> str | None:
