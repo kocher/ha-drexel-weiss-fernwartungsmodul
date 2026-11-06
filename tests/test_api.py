@@ -35,6 +35,23 @@ class TestApi(unittest.TestCase):
         self.assertEqual(values[210], 23456)
         self.assertEqual(values[1184], 650)
 
+    def test_parse_prefers_newest_row_across_devices(self):
+        payload = [
+            {
+                "value": [
+                    {
+                        "hardwareId": 140,
+                        "values": [{"rowId": 6465, "parameterId": 1054, "currentValue": 55051}],
+                    },
+                    {
+                        "hardwareId": 120,
+                        "values": [{"rowId": 247, "parameterId": 1054, "currentValue": 51246}],
+                    },
+                ]
+            }
+        ]
+        self.assertEqual(api.parse_values(payload)[1054], 55051)
+
     def test_parse_rejects_unknown_shape(self):
         with self.assertRaises(ValueError):
             api.parse_values({"foo": "bar"})

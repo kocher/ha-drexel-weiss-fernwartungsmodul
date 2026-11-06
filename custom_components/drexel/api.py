@@ -23,18 +23,24 @@ def build_url(
 
 
 def parse_values(payload: Any) -> dict[int, Any]:
-    """Flatten ``[{"value": [{"values": [...]}]}]`` into {parameterId: currentValue}."""
+    """Flatten ``[{"value": [{"values": [...]}]}]`` into {parameterId: currentValue}.
+
+    Several devices report the same parameterId, often with stale values. Like
+    the web UI, keep the entry with the highest ``rowId`` (the newest one).
+    """
     try:
-        groups = payload[0]["value"]
-        values = {
-            item["parameterId"]: item.get("currentValue")
-            for group in groups
-            for item in group.get("values") or []
-            if item.get("parameterId") is not None
-        }
+        newest: dict[int, tuple[int, Any]] = {}
+        for group in payload[0]["value"]:
+            for item in group.get("values") or []:
+                parameter_id = item.get("parameterId")
+                if parameter_id is None:
+                    continue
+                row_id = item.get("rowId") or 0
+                if parameter_id not in newest or row_id >= newest[parameter_id][0]:
+                    newest[parameter_id] = (row_id, item.get("currentValue"))
     except (KeyError, IndexError, TypeError, AttributeError) as err:
         raise ValueError("Unerwartete Antwort vom Aerosmart-Fernwartungsmodul") from err
-    return values
+    return {parameter_id: value for parameter_id, (_, value) in newest.items()}
 
 
 def has_informations(payload: Any) -> bool:
