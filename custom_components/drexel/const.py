@@ -151,7 +151,7 @@ SENSORS: tuple[SensorDef, ...] = (
     SensorDef(
         parameter_id=230,
         name="Aerosmart CO₂",
-        device_class=SensorDeviceClass.CARBON_DIOXIDE,
+        device_class=SensorDeviceClass.CO2,
         unit="ppm",
     ),
 )
