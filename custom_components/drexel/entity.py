@@ -13,7 +13,7 @@ class DrexelEntity(CoordinatorEntity[DrexelCoordinator]):
     """Common name, unique id and device grouping."""
 
     def __init__(
-        self, coordinator: DrexelCoordinator, parameter_id: int, name: str
+        self, coordinator: DrexelCoordinator, parameter_id: int | str, name: str
     ) -> None:
         super().__init__(coordinator)
         self._parameter_id = parameter_id

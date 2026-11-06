@@ -16,17 +16,22 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .api import parse_values
+from .api import has_informations, parse_values
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class DrexelCoordinator(DataUpdateCoordinator[dict[int, Any]]):
-    """Fetch all parameter values in one request."""
+    """Fetch all parameter values and the informations in one cycle."""
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, url: str, scan_interval: int
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        url: str,
+        informations_url: str,
+        scan_interval: int,
     ) -> None:
         super().__init__(
             hass,
@@ -37,17 +42,27 @@ class DrexelCoordinator(DataUpdateCoordinator[dict[int, Any]]):
         )
         self.entry = entry
         self.url = url
+        self.informations_url = informations_url
+        self.informations = False
 
     async def _async_update_data(self) -> dict[int, Any]:
-        try:
-            async with asyncio.timeout(10):
-                response = await async_get_clientsession(self.hass).get(self.url)
-                response.raise_for_status()
-                payload = await response.json(content_type=None)
-        except (aiohttp.ClientError, TimeoutError, ValueError) as err:
-            raise UpdateFailed(f"Fehler beim Abrufen von {self.url}: {err}") from err
+        values_payload = await self._async_get_json(self.url)
+        informations = await self._async_get_json(self.informations_url)
 
         try:
-            return parse_values(payload)
+            values = parse_values(values_payload)
         except ValueError as err:
             raise UpdateFailed(str(err)) from err
+
+        # An empty payload means "no informations", anything else is a problem.
+        self.informations = has_informations(informations)
+        return values
+
+    async def _async_get_json(self, url: str) -> Any:
+        try:
+            async with asyncio.timeout(10):
+                response = await async_get_clientsession(self.hass).get(url)
+                response.raise_for_status()
+                return await response.json(content_type=None)
+        except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+            raise UpdateFailed(f"Fehler beim Abrufen von {url}: {err}") from err

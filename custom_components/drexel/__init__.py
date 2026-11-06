@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .api import build_url
+from .api import INFORMATIONS_QUERY, build_url
 from .const import (
     CONF_HOST,
     CONF_PATH,
@@ -25,6 +25,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass,
         entry,
         build_url(entry.data[CONF_HOST], entry.data[CONF_PORT], entry.data[CONF_PATH]),
+        build_url(
+            entry.data[CONF_HOST],
+            entry.data[CONF_PORT],
+            entry.data[CONF_PATH],
+            INFORMATIONS_QUERY,
+        ),
         entry.options.get(
             CONF_SCAN_INTERVAL,
             entry.data.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL_SECONDS),

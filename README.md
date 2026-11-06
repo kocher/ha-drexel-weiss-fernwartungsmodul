@@ -24,6 +24,9 @@ hinzuzufügen, in `const.py` einen `SensorDef`/`BinarySensorDef` mit seiner
 
 Die Komponente liest `http://<host>:<port><pfad>?area=values` und ordnet
 `payload[0]["value"][*]["values"][*]` zu `{parameterId: currentValue}` zu.
+Zusätzlich wird pro Zyklus `?area=informations` gelesen: liefert der Endpunkt
+ein nicht-leeres JSON-Objekt, ist der Binärsensor **Aerosmart Informationen**
+(Device Class `problem`) an.
 
 ## Lizenz
 

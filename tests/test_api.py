@@ -51,6 +51,16 @@ class TestApi(unittest.TestCase):
         self.assertEqual(
             api.build_url("192.168.1.2", 334), "http://192.168.1.2:334/dw?area=values"
         )
+        self.assertEqual(
+            api.build_url("192.168.1.2", 334, query=api.INFORMATIONS_QUERY),
+            "http://192.168.1.2:334/dw?area=informations",
+        )
+
+    def test_has_informations(self):
+        for empty in ({}, [], "", None, {"value": []}, [{"value": []}]):
+            self.assertFalse(api.has_informations(empty), empty)
+        for filled in ({"value": [{"text": "Filter tauschen"}]}, [{"value": []}, {"x": 1}]):
+            self.assertTrue(api.has_informations(filled), filled)
 
 
 if __name__ == "__main__":

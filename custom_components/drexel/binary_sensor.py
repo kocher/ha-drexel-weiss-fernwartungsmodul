@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -18,7 +21,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: DrexelCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(DrexelBinarySensor(coordinator, desc) for desc in BINARY_SENSORS)
+    async_add_entities(
+        [DrexelBinarySensor(coordinator, desc) for desc in BINARY_SENSORS]
+        + [DrexelInformationSensor(coordinator)]
+    )
 
 
 class DrexelBinarySensor(DrexelEntity, BinarySensorEntity):
@@ -34,3 +40,15 @@ class DrexelBinarySensor(DrexelEntity, BinarySensorEntity):
     def is_on(self) -> bool | None:
         value = self._raw_value
         return None if value is None else bool(value)
+
+
+class DrexelInformationSensor(DrexelEntity, BinarySensorEntity):
+    """On when the module reports informations (problems)."""
+
+    def __init__(self, coordinator: DrexelCoordinator) -> None:
+        super().__init__(coordinator, "informations", "Aerosmart Informationen")
+        self._attr_device_class = BinarySensorDeviceClass.PROBLEM
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.informations
