@@ -101,6 +101,9 @@ Netz- oder Einspeise-Sensor statt dem Kontakt des Wechselrichters.
 - **Brauchwasser**: Ist der Boiler kälter als 52 °C, wird Brauchwasser-Soll
   auf 55 °C gesetzt (beides einstellbar).
 - **Raum** (optional): Raum-Soll wird um 0,5–3 K angehoben.
+- **Zusätzliche Bedingungen** (optional): nur anheben, wenn z. B. die Fenster
+  geschlossen sind oder jemand zu Hause ist. Das Zurücksetzen prüft sie nicht,
+  eine Anhebung wird also immer beendet.
 - **Niedertarif** (optional): ein Schalter oder Binärsensor, der wie
   Überschuss wirkt.
 - Ein- und Ausschaltverzögerung (Standard 5 / 15 min) verhindern Hin- und
