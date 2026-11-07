@@ -84,7 +84,8 @@ class TestApi(unittest.TestCase):
         )
 
     def test_has_informations(self):
-        for empty in ({}, [], "", None, {"value": []}, [{"value": []}]):
+        envelope = {"key": 100, "identifier": "abc", "ticks": 639288294421615703, "value": []}
+        for empty in ({}, [], "", None, {"value": []}, [{"value": []}], [envelope]):
             self.assertFalse(api.has_informations(empty), empty)
         for filled in ({"value": [{"text": "Filter tauschen"}]}, [{"value": []}, {"x": 1}]):
             self.assertTrue(api.has_informations(filled), filled)

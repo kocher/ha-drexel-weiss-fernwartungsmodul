@@ -158,9 +158,12 @@ def has_informations(payload: Any) -> bool:
     """Return True if an informations answer carries anything.
 
     The module wraps reports the same way as the values area, so an empty
-    ``{}``, ``[]`` or ``{"value": []}`` all mean "no information".
+    ``{}``, ``[]`` or ``{"value": []}`` all mean "no information". In an
+    envelope only ``value`` counts, not ``key``, ``identifier`` or ``ticks``.
     """
     if isinstance(payload, dict):
+        if "value" in payload:
+            return has_informations(payload["value"])
         return any(has_informations(value) for value in payload.values())
     if isinstance(payload, (list, tuple)):
         return any(has_informations(item) for item in payload)
