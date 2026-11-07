@@ -1,0 +1,90 @@
+blueprint:
+  name: Aerosmart Meldungen
+  description: >
+    Benachrichtigt, wenn die Aerosmart eine **Störung** oder **Information**
+    meldet (z. B. „Lüftung: Grobstaubfilter wechseln!“) und optional, wenn sie
+    wieder weg ist. Kommt zu einer bestehenden Meldung eine weitere hinzu, wird
+    nur die neue gemeldet.
+
+
+    Für Störung und Informationen je eine Automation aus diesem Blueprint
+    anlegen.
+  domain: automation
+  source_url: https://github.com/kocher/ha-drexel-weiss-fernwartungsmodul/blob/main/blueprints/automation/drexel/meldungen.yaml
+  homeassistant:
+    min_version: 2024.8.0
+  input:
+    message_sensor:
+      name: Meldung
+      description: >
+        „Störung“ (Defekt, das Gerät schränkt den Betrieb ein) oder
+        „Informationen“ (Wartungshinweis, das Gerät läuft weiter) am
+        Fernwartungsmodul.
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+              integration: drexel
+              device_class: problem
+    notify_cleared:
+      name: Auch bei Behebung benachrichtigen
+      description: Bescheid geben, wenn eine Meldung nicht mehr ansteht.
+      default: true
+      selector:
+        boolean:
+    notify_action:
+      name: Benachrichtigung
+      description: >
+        Aktionen, die ausgeführt werden. Vorbelegt ist eine Benachrichtigung
+        in Home Assistant; über „⋮ → Aktion ändern“ z. B. das Telefon
+        (`notify.mobile_app_…`) wählen. Titel und Nachricht stehen als
+        `{{ title }}` und `{{ message }}` bereit, die einzelnen Meldungen als
+        Listen `{{ neu }}` und `{{ behoben }}`.
+      default:
+        - action: notify.persistent_notification
+          data:
+            title: "{{ title }}"
+            message: "{{ message }}"
+      selector:
+        action: {}
+
+mode: queued
+max_exceeded: silent
+
+trigger:
+  # Also fires when only the list of messages changes.
+  - platform: state
+    entity_id: !input message_sensor
+
+condition:
+  # Skip startup and outages; those are not new or cleared messages.
+  - "{{ trigger.from_state is not none and trigger.from_state.state in ['on', 'off'] }}"
+  - "{{ trigger.to_state is not none and trigger.to_state.state in ['on', 'off'] }}"
+
+variables:
+  notify_cleared: !input notify_cleared
+  before: "{{ trigger.from_state.attributes.meldungen | default([], true) | list }}"
+  after: "{{ trigger.to_state.attributes.meldungen | default([], true) | list }}"
+  # A message without text still counts when the sensor turns on.
+  neu: >
+    {%- set items = after | reject('in', before) | list -%}
+    {{ items if items or trigger.from_state.state == 'on' or trigger.to_state.state == 'off'
+       else ['Meldung ohne Text'] }}
+  behoben: >
+    {%- set items = before | reject('in', after) | list -%}
+    {{ items if items or trigger.from_state.state == 'off' or trigger.to_state.state == 'on'
+       else ['Meldung ohne Text'] }}
+  # "… Informationen" / "… Störung" without the hub name in front.
+  kind: "{{ trigger.to_state.name.split(' ') | last }}"
+  all_cleared: "{{ trigger.from_state.state == 'on' and trigger.to_state.state == 'off' }}"
+  title: "{{ 'Aerosmart: ' ~ kind ~ (' behoben' if all_cleared else '') }}"
+  message: >
+    {%- set cleared = behoben | map('regex_replace', '^', 'Behoben: ') | list
+                      if notify_cleared else [] -%}
+    {{ (neu + cleared) | join('\n') }}
+
+action:
+  - if:
+      - "{{ neu | count > 0 or (notify_cleared and behoben | count > 0) }}"
+    then:
+      - sequence: !input notify_action

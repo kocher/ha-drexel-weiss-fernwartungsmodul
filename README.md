@@ -121,6 +121,24 @@ Die vorherigen Sollwerte merkt sich das Blueprint in Zahlenwert-Helfern
 (Minimum 0, Maximum 100, Schrittweite 0,1), damit sie einen Neustart
 überstehen – je einen für Brauchwasser und Raum vorher anlegen.
 
+## Benachrichtigung bei Störungen und Informationen (Blueprint)
+
+Das Blueprint **Aerosmart Meldungen** schickt eine Nachricht, sobald die
+Aerosmart eine Störung oder Information meldet, und optional, wenn sie behoben
+ist. Für Störung und Informationen je eine Automation daraus anlegen.
+
+[![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fkocher%2Fha-drexel-weiss-fernwartungsmodul%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fdrexel%2Fmeldungen.yaml)
+
+- Titel „Aerosmart: Informationen“, Nachricht z. B. „Lüftung:
+  Grobstaubfilter wechseln!“, bei Behebung „Behoben: …“.
+- Kommt zu einer anstehenden Meldung eine weitere hinzu, wird nur die neue
+  gemeldet.
+- Ein Neustart von Home Assistant oder ein kurzer Verbindungsabbruch zum Modul
+  löst keine Nachricht aus.
+- Vorbelegt ist eine Benachrichtigung in Home Assistant; die Aktion lässt sich
+  wie in jeder Automation auswählen (z. B. das Telefon). Titel und Nachricht
+  stehen als `{{ title }}` und `{{ message }}` bereit.
+
 ## Technik
 
 Pro Abfrageintervall liest die Integration drei Bereiche des Moduls (`values`,
