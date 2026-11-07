@@ -11,7 +11,8 @@ blueprint:
     Ladetemperatur gesetzt (SG-Box: 55 °C ab unter 52 °C). Optional wird
     Raum-Soll angehoben (SG-Box: 0,5–3 K).
 
-    **Kein Überschuss mehr**: die vorherigen Sollwerte werden
+    **Kein Überschuss mehr** (Einspeisung plus Leistungsaufnahme der
+    Wärmepumpe unter der Schwelle): die vorherigen Sollwerte werden
     wiederhergestellt. Hat jemand den Sollwert in der Zwischenzeit geändert,
     bleibt dessen Wert stehen.
 
@@ -68,6 +69,26 @@ blueprint:
               min: 100
               max: 20000
               step: 100
+              unit_of_measurement: W
+              mode: box
+        heat_pump_power:
+          name: Leistungsaufnahme Wärmepumpe
+          description: >
+            Was die Wärmepumpe beim Heizen ungefähr aufnimmt. Während einer
+            Anhebung wird sie zur Einspeisung hinzugerechnet: Die Wärmepumpe
+            verbraucht dann ja den Überschuss, der sonst eingespeist würde.
+            Zurückgesetzt wird also erst, wenn die Einspeisung unter Schwelle
+            minus Leistungsaufnahme fällt – sonst schaltet die Anhebung kurz
+            nach dem Start der Wärmepumpe wieder ab. Die Schwelle sollte darüber
+            liegen. Zurückgesetzt wird spätestens ab 100 W Einspeisung, damit
+            ein Batteriespeicher, der das Netz bei null hält, die Anhebung nicht
+            weiter versorgt. 0 rechnet nichts hinzu.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 10000
+              step: 50
               unit_of_measurement: W
               mode: box
         on_delay:
@@ -245,6 +266,8 @@ max_exceeded: silent
 trigger_variables:
   cheap_rate: !input cheap_rate
   export_sign: !input export_sign
+  trigger_threshold: !input threshold
+  heat_pump_power: !input heat_pump_power
 
 trigger:
   # Export as a positive number, whatever the sensor's sign convention.
@@ -264,9 +287,12 @@ trigger:
     attribute: current_temperature
     below: !input start_below
     id: start
+  # The heat pump's draw counts as export, but at most down to 100 W.
   - platform: numeric_state
     entity_id: !input export_sensor
-    value_template: "{{ state.state | float(0) * export_sign | int(1) }}"
+    value_template: >
+      {{ state.state | float(0) * export_sign | int(1)
+         + [heat_pump_power | float(0), trigger_threshold | float(0) - 100] | min }}
     below: !input threshold
     for:
       minutes: !input off_delay
@@ -293,8 +319,15 @@ variables:
   export_text: >
     {{ 'Einspeisung ' ~ export ~ ' W' if export >= 0
        else 'Netzbezug ' ~ (-export) ~ ' W' }}
+  # While raised, the heat pump uses part of the surplus (see stop trigger).
+  raised: >
+    {{ states(water_helper) | float(0) > 0
+       or (use_room and states(room_helper) | float(0) > 0) }}
+  surplus_threshold: >
+    {{ [threshold - heat_pump_power | float(0), 100] | max if raised
+       else threshold }}
   surplus: >
-    {{ export > threshold
+    {{ export > surplus_threshold
        or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
   water_current: "{{ state_attr(water_heater, 'current_temperature') }}"
   water_target: "{{ state_attr(water_heater, 'temperature') | float(0) }}"

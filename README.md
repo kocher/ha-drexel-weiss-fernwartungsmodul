@@ -98,6 +98,9 @@ Netz- oder Einspeise-Sensor statt dem Kontakt des Wechselrichters.
 
 [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fkocher%2Fha-drexel-weiss-fernwartungsmodul%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fdrexel%2Fpv_ueberschuss.yaml)
 
+- **Leistungsaufnahme Wärmepumpe**: wird während einer Anhebung zur
+  Einspeisung hinzugerechnet, damit die Anhebung nicht abschaltet, sobald die
+  Wärmepumpe den Überschuss selbst verbraucht.
 - **Brauchwasser**: Ist der Boiler kälter als 52 °C, wird Brauchwasser-Soll
   auf 55 °C gesetzt (beides einstellbar).
 - **Raum** (optional): Raum-Soll wird um 0,5–3 K angehoben, auf Wunsch nur
