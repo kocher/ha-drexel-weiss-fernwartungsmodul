@@ -6,14 +6,14 @@ blueprint:
     Home Assistant statt dem Kontakt des Wechselrichters.
 
 
-    **Überschuss** (Einspeisung über der Schwelle, oder optional Niedertarif):
-    liegt der Boiler unter der Starttemperatur, wird Brauchwasser-Soll auf die
-    Ladetemperatur gesetzt (SG-Box: 55 °C ab unter 52 °C). Optional wird
-    Raum-Soll angehoben (SG-Box: 0,5–3 K).
+    **Überschuss** (Einspeisung über Leistungsaufnahme der Wärmepumpe plus
+    Reserve, oder optional Niedertarif): liegt der Boiler unter der
+    Starttemperatur, wird Brauchwasser-Soll auf die Ladetemperatur gesetzt
+    (SG-Box: 55 °C ab unter 52 °C). Optional wird Raum-Soll angehoben
+    (SG-Box: 0,5–3 K).
 
-    **Kein Überschuss mehr** (Einspeisung plus Leistungsaufnahme der
-    Wärmepumpe unter der Schwelle): die vorherigen Sollwerte werden
-    wiederhergestellt. Hat jemand den Sollwert in der Zwischenzeit geändert,
+    **Kein Überschuss mehr** (Einspeisung unter der Reserve, während die
+    Wärmepumpe läuft): die vorherigen Sollwerte werden wiederhergestellt. Hat jemand den Sollwert in der Zwischenzeit geändert,
     bleibt dessen Wert stehen.
 
 
@@ -57,45 +57,43 @@ blueprint:
                   value: "1"
                 - label: negativ (Netz-Sensor, Bezug positiv)
                   value: "-1"
-        threshold:
-          name: Schwelle
-          description: >
-            Ab dieser Einspeisung gilt Überschuss. Sinnvoll ist etwa die
-            Leistungsaufnahme der Wärmepumpe, damit sie überwiegend mit
-            eigenem Strom läuft.
-          default: 1500
-          selector:
-            number:
-              min: 100
-              max: 20000
-              step: 100
-              unit_of_measurement: W
-              mode: box
         heat_pump_power:
           name: Leistungsaufnahme Wärmepumpe
           description: >
-            Was die Wärmepumpe beim Heizen ungefähr aufnimmt. Während einer
-            Anhebung wird sie zur Einspeisung hinzugerechnet: Die Wärmepumpe
-            verbraucht dann ja den Überschuss, der sonst eingespeist würde.
-            Zurückgesetzt wird also erst, wenn die Einspeisung unter Schwelle
-            minus Leistungsaufnahme fällt – sonst schaltet die Anhebung kurz
-            nach dem Start der Wärmepumpe wieder ab. Die Schwelle sollte darüber
-            liegen. Zurückgesetzt wird spätestens ab 100 W Einspeisung, damit
-            ein Batteriespeicher, der das Netz bei null hält, die Anhebung nicht
-            weiter versorgt. 0 rechnet nichts hinzu.
-          default: 0
+            Was die Wärmepumpe beim Heizen ungefähr aufnimmt, samt
+            Ventilatoren. Angehoben wird erst, wenn so viel plus die Reserve
+            eingespeist wird – dann läuft die Wärmepumpe mit eigenem Strom.
+            Vorgabe 500 W passt zur aerosmart m: max. 450 W laut Datenblatt,
+            dazu die Ventilatoren.
+          default: 500
           selector:
             number:
               min: 0
               max: 10000
-              step: 50
+              step: 10
+              unit_of_measurement: W
+              mode: box
+        reserve:
+          name: Reserve
+          description: >
+            So viel muss über die Wärmepumpe hinaus übrig sein. Angehoben wird
+            ab Leistungsaufnahme plus Reserve. Zurückgesetzt wird, wenn bei
+            laufender Wärmepumpe weniger als die Reserve eingespeist wird. Mit
+            einem Batteriespeicher, der das Netz bei null hält, nicht zu klein
+            wählen – sonst versorgt er die Anhebung weiter.
+          default: 300
+          selector:
+            number:
+              min: 100
+              max: 10000
+              step: 10
               unit_of_measurement: W
               mode: box
         on_delay:
           name: Einschaltverzögerung
           description: >
-            So lange muss die Einspeisung ununterbrochen über der Schwelle
-            liegen, bevor angehoben wird.
+            So lange muss die Einspeisung ununterbrochen über
+            Leistungsaufnahme plus Reserve liegen, bevor angehoben wird.
           default: 5
           selector:
             number:
@@ -105,7 +103,7 @@ blueprint:
         off_delay:
           name: Ausschaltverzögerung
           description: >
-            So lange muss die Einspeisung ununterbrochen unter der Schwelle
+            So lange muss die Einspeisung ununterbrochen unter der Reserve
             liegen, bevor die Sollwerte zurückgesetzt werden. Bei Wolken nicht
             zu kurz wählen.
           default: 15
@@ -266,15 +264,17 @@ max_exceeded: silent
 trigger_variables:
   cheap_rate: !input cheap_rate
   export_sign: !input export_sign
-  trigger_threshold: !input threshold
   heat_pump_power: !input heat_pump_power
 
 trigger:
   # Export as a positive number, whatever the sensor's sign convention.
+  # Start once the heat pump would still leave the reserve.
   - platform: numeric_state
     entity_id: !input export_sensor
-    value_template: "{{ state.state | float(0) * export_sign | int(1) }}"
-    above: !input threshold
+    value_template: >
+      {{ state.state | float(0) * export_sign | int(1)
+         - heat_pump_power | float(0) }}
+    above: !input reserve
     for:
       minutes: !input on_delay
     id: start
@@ -287,13 +287,11 @@ trigger:
     attribute: current_temperature
     below: !input start_below
     id: start
-  # The heat pump's draw counts as export, but at most down to 100 W.
+  # Stop when, with the heat pump running, less than the reserve is left.
   - platform: numeric_state
     entity_id: !input export_sensor
-    value_template: >
-      {{ state.state | float(0) * export_sign | int(1)
-         + [heat_pump_power | float(0), trigger_threshold | float(0) - 100] | min }}
-    below: !input threshold
+    value_template: "{{ state.state | float(0) * export_sign | int(1) }}"
+    below: !input reserve
     for:
       minutes: !input off_delay
     id: stop
@@ -306,7 +304,7 @@ trigger:
 
 variables:
   export_sensor: !input export_sensor
-  threshold: !input threshold
+  reserve: !input reserve
   water_heater: !input water_heater
   water_helper: !input water_helper
   boost_temperature: !input boost_temperature
@@ -319,13 +317,12 @@ variables:
   export_text: >
     {{ 'Einspeisung ' ~ export ~ ' W' if export >= 0
        else 'Netzbezug ' ~ (-export) ~ ' W' }}
-  # While raised, the heat pump uses part of the surplus (see stop trigger).
+  # While raised, the heat pump already uses its share (see triggers).
   raised: >
     {{ states(water_helper) | float(0) > 0
        or (use_room and states(room_helper) | float(0) > 0) }}
   surplus_threshold: >
-    {{ [threshold - heat_pump_power | float(0), 100] | max if raised
-       else threshold }}
+    {{ reserve if raised else reserve + heat_pump_power | float(0) }}
   surplus: >
     {{ export > surplus_threshold
        or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}

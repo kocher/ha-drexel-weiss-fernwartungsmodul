@@ -92,15 +92,16 @@ Weiss Aerosmart**:
 ## PV-Überschuss nutzen (Blueprint)
 
 Ohne SG-Box kann Home Assistant deren Smart-Grid-Funktion übernehmen: Das
-Blueprint **Aerosmart PV-Überschuss** hebt bei Einspeisung über einer Schwelle
-die Sollwerte an und setzt sie danach zurück – wie die SG-Box, aber mit einem
+Blueprint **Aerosmart PV-Überschuss** hebt bei Einspeisung über der
+Leistungsaufnahme der Wärmepumpe plus einer Reserve die Sollwerte an und setzt sie danach zurück – wie die SG-Box, aber mit einem
 Netz- oder Einspeise-Sensor statt dem Kontakt des Wechselrichters.
 
 [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fkocher%2Fha-drexel-weiss-fernwartungsmodul%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fdrexel%2Fpv_ueberschuss.yaml)
 
-- **Leistungsaufnahme Wärmepumpe**: wird während einer Anhebung zur
-  Einspeisung hinzugerechnet, damit die Anhebung nicht abschaltet, sobald die
-  Wärmepumpe den Überschuss selbst verbraucht.
+- **Leistungsaufnahme Wärmepumpe und Reserve**: angehoben wird ab beiden
+  zusammen (Vorgabe 500 + 300 W), zurückgesetzt erst, wenn bei laufender
+  Wärmepumpe weniger als die Reserve eingespeist wird – so schaltet die
+  Anhebung nicht ab, sobald die Wärmepumpe den Überschuss selbst verbraucht.
 - **Brauchwasser**: Ist der Boiler kälter als 52 °C, wird Brauchwasser-Soll
   auf 55 °C gesetzt (beides einstellbar).
 - **Raum** (optional): Raum-Soll wird um 0,5–3 K angehoben, auf Wunsch nur
