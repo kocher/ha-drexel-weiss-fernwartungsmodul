@@ -125,11 +125,12 @@ Die vorherigen Sollwerte merkt sich das Blueprint in Zahlenwert-Helfern
 
 Das Blueprint **Aerosmart Meldungen** schickt eine Nachricht, sobald die
 Aerosmart eine Störung oder Information meldet, und optional, wenn sie behoben
-ist. Für Störung und Informationen je eine Automation daraus anlegen.
+ist. Störung und Informationen lassen sich in einer Automation zusammen
+überwachen.
 
 [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fkocher%2Fha-drexel-weiss-fernwartungsmodul%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fdrexel%2Fmeldungen.yaml)
 
-- Titel „Aerosmart: Informationen“, Nachricht z. B. „Lüftung:
+- Titel „Aerosmart: Störung“ bzw. „Aerosmart: Informationen“, Nachricht z. B. „Lüftung:
   Grobstaubfilter wechseln!“, bei Behebung „Behoben: …“.
 - Kommt zu einer anstehenden Meldung eine weitere hinzu, wird nur die neue
   gemeldet.

@@ -7,21 +7,22 @@ blueprint:
     nur die neue gemeldet.
 
 
-    Für Störung und Informationen je eine Automation aus diesem Blueprint
-    anlegen.
+    Störung und Informationen lassen sich in einer Automation zusammen
+    überwachen; der Titel sagt, welche Meldung es ist.
   domain: automation
   source_url: https://github.com/kocher/ha-drexel-weiss-fernwartungsmodul/blob/main/blueprints/automation/drexel/meldungen.yaml
   homeassistant:
     min_version: 2024.8.0
   input:
     message_sensor:
-      name: Meldung
+      name: Meldungen
       description: >
-        „Störung“ (Defekt, das Gerät schränkt den Betrieb ein) oder
+        „Störung“ (Defekt, das Gerät schränkt den Betrieb ein) und/oder
         „Informationen“ (Wartungshinweis, das Gerät läuft weiter) am
         Fernwartungsmodul.
       selector:
         entity:
+          multiple: true
           filter:
             - domain: binary_sensor
               integration: drexel
