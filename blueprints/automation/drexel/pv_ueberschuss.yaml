@@ -29,10 +29,14 @@ blueprint:
   input:
     surplus:
       name: Überschuss
+      description: Wann gilt Strom als übrig?
       input:
         export_sensor:
           name: Netz- oder Einspeise-Sensor
-          description: Leistung am Netzanschluss in W.
+          description: >
+            Leistung am Netzanschluss in W, z. B. vom Smart Meter oder
+            Wechselrichter. Wie das Vorzeichen zu lesen ist, legt „Einspeisung
+            ist“ fest.
           selector:
             entity:
               filter:
@@ -40,6 +44,10 @@ blueprint:
                   device_class: power
         export_sign:
           name: Einspeisung ist
+          description: >
+            Positiv bei einem reinen Einspeise-Sensor (0 bei Netzbezug).
+            Negativ bei einem Netz-Sensor, der Bezug positiv und Einspeisung
+            negativ anzeigt.
           default: "1"
           selector:
             select:
@@ -50,7 +58,10 @@ blueprint:
                   value: "-1"
         threshold:
           name: Schwelle
-          description: Ab dieser Einspeisung gilt Überschuss.
+          description: >
+            Ab dieser Einspeisung gilt Überschuss. Sinnvoll ist etwa die
+            Leistungsaufnahme der Wärmepumpe, damit sie überwiegend mit
+            eigenem Strom läuft.
           default: 1500
           selector:
             number:
@@ -61,7 +72,9 @@ blueprint:
               mode: box
         on_delay:
           name: Einschaltverzögerung
-          description: So lange muss die Einspeisung über der Schwelle liegen.
+          description: >
+            So lange muss die Einspeisung ununterbrochen über der Schwelle
+            liegen, bevor angehoben wird.
           default: 5
           selector:
             number:
@@ -71,8 +84,9 @@ blueprint:
         off_delay:
           name: Ausschaltverzögerung
           description: >
-            So lange muss die Einspeisung unter der Schwelle liegen, bevor die
-            Sollwerte zurückgesetzt werden. Bei Wolken nicht zu kurz wählen.
+            So lange muss die Einspeisung ununterbrochen unter der Schwelle
+            liegen, bevor die Sollwerte zurückgesetzt werden. Bei Wolken nicht
+            zu kurz wählen.
           default: 15
           selector:
             number:
@@ -83,7 +97,8 @@ blueprint:
           name: Niedertarif (optional)
           description: >
             Ist diese Entität „an“, wird wie bei Überschuss angehoben
-            (SG-Box-Eingang „Smart Meter“). Leer lassen, wenn nicht vorhanden.
+            (SG-Box-Eingang „Smart Meter“), bei „aus“ zurückgesetzt. Leer
+            lassen, wenn nicht vorhanden.
           default: ""
           selector:
             entity:
@@ -91,9 +106,11 @@ blueprint:
                 - domain: [binary_sensor, input_boolean, switch]
     water:
       name: Brauchwasser
+      description: Boiler mit Überschuss aufheizen.
       input:
         water_heater:
           name: Brauchwasser
+          description: Die Brauchwasser-Entität der Aerosmart (Wärmepumpe).
           selector:
             entity:
               filter:
@@ -101,12 +118,19 @@ blueprint:
                   integration: drexel
         water_helper:
           name: Helfer für den vorherigen Brauchwasser-Soll
+          description: >
+            Zahlenwert-Helfer (0–100, Schrittweite 0,1), in dem der
+            Brauchwasser-Soll vor der Anhebung gespeichert wird. Nicht von Hand
+            ändern; 0 heißt „keine Anhebung aktiv“.
           selector:
             entity:
               filter:
                 - domain: input_number
         boost_temperature:
           name: Ladetemperatur
+          description: >
+            Auf diesen Brauchwasser-Soll wird bei Überschuss angehoben.
+            SG-Box: 55 °C, das Maximum der Aerosmart.
           default: 55
           selector:
             number:
@@ -115,7 +139,9 @@ blueprint:
               unit_of_measurement: °C
         start_below:
           name: Starttemperatur
-          description: Nur laden, wenn der Boiler kälter ist.
+          description: >
+            Nur anheben, wenn der Boiler kälter ist – sonst lohnt die Ladung
+            nicht. SG-Box: 52 °C.
           default: 52
           selector:
             number:
@@ -124,11 +150,14 @@ blueprint:
               unit_of_measurement: °C
     room:
       name: Raum (optional)
+      description: Zusätzlich Wärme im Haus speichern.
       collapsed: true
       input:
         climate:
           name: Raum
-          description: Leer lassen, um Raum-Soll nicht anzuheben.
+          description: >
+            Die Raum-Entität der Aerosmart (Raumbediengerät). Leer lassen, um
+            Raum-Soll nicht anzuheben.
           default: ""
           selector:
             entity:
@@ -137,6 +166,10 @@ blueprint:
                   integration: drexel
         room_helper:
           name: Helfer für den vorherigen Raum-Soll
+          description: >
+            Zahlenwert-Helfer (0–100, Schrittweite 0,1), in dem der Raum-Soll
+            vor der Anhebung gespeichert wird. Nur nötig, wenn Raum gewählt
+            ist.
           default: ""
           selector:
             entity:
@@ -144,6 +177,9 @@ blueprint:
                 - domain: input_number
         room_raise:
           name: Anhebung
+          description: >
+            Um so viel wird Raum-Soll bei Überschuss erhöht, höchstens bis zum
+            Maximum des Geräts. SG-Box: 0,5–3 K.
           default: 1
           selector:
             number:
@@ -151,6 +187,22 @@ blueprint:
               max: 3
               step: 0.5
               unit_of_measurement: K
+    notification:
+      name: Benachrichtigung (optional)
+      description: Bescheid geben, wenn angehoben oder zurückgesetzt wird.
+      collapsed: true
+      input:
+        notify_service:
+          name: Benachrichtigungsdienst
+          description: >
+            Aktion, die die Nachricht verschickt, z. B.
+            `notify.mobile_app_mein_telefon` oder
+            `notify.persistent_notification` (Benachrichtigung in Home
+            Assistant). Die Nachricht enthält Einspeisung, aktuelle Temperatur
+            und Sollwerte. Leer lassen für keine Benachrichtigung.
+          default: ""
+          selector:
+            text:
 
 mode: queued
 max_exceeded: silent
@@ -201,10 +253,20 @@ variables:
   climate: !input climate
   room_helper: !input room_helper
   room_raise: !input room_raise
+  notify_service: !input notify_service
   use_room: "{{ climate != '' and room_helper != '' }}"
+  export: "{{ (states(export_sensor) | float(0) * export_sign | int(1)) | round(0) | int }}"
+  export_text: >
+    {{ 'Einspeisung ' ~ export ~ ' W' if export >= 0
+       else 'Netzbezug ' ~ (-export) ~ ' W' }}
   surplus: >
-    {{ states(export_sensor) | float(0) * export_sign | int(1) > threshold
+    {{ export > threshold
        or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
+  water_current: "{{ state_attr(water_heater, 'current_temperature') }}"
+  water_target: "{{ state_attr(water_heater, 'temperature') | float(0) }}"
+  room_current: "{{ state_attr(climate, 'current_temperature') if use_room else none }}"
+  room_target: "{{ state_attr(climate, 'temperature') | float(0) if use_room else 0 }}"
+  room_max: "{{ state_attr(climate, 'max_temp') | float(26) if use_room else 26 }}"
 
 action:
   - choose:
@@ -212,35 +274,55 @@ action:
         conditions:
           - "{{ trigger.id in ['start', 'check'] and surplus }}"
         sequence:
+          - variables:
+              raise_water: >
+                {{ states(water_helper) | float(0) == 0
+                   and water_current | float(99) < start_below }}
+              raise_room: "{{ use_room and states(room_helper) | float(0) == 0 }}"
+              room_boost: "{{ [room_target + room_raise, room_max] | min }}"
           - if:
-              - "{{ states(water_helper) | float(0) == 0 }}"
-              - "{{ state_attr(water_heater, 'current_temperature') | float(99) < start_below }}"
+              - "{{ raise_water }}"
             then:
               - service: input_number.set_value
                 target:
                   entity_id: "{{ water_helper }}"
                 data:
-                  value: "{{ state_attr(water_heater, 'temperature') }}"
+                  value: "{{ water_target }}"
               - service: water_heater.set_temperature
                 target:
                   entity_id: "{{ water_heater }}"
                 data:
                   temperature: "{{ boost_temperature }}"
           - if:
-              - "{{ use_room and states(room_helper) | float(0) == 0 }}"
+              - "{{ raise_room }}"
             then:
               - service: input_number.set_value
                 target:
                   entity_id: "{{ room_helper }}"
                 data:
-                  value: "{{ state_attr(climate, 'temperature') }}"
+                  value: "{{ room_target }}"
               - service: climate.set_temperature
                 target:
                   entity_id: "{{ climate }}"
                 data:
-                  temperature: >
-                    {{ [state_attr(climate, 'temperature') | float + room_raise,
-                        state_attr(climate, 'max_temp') | float(26)] | min }}
+                  temperature: "{{ room_boost }}"
+          - if:
+              - "{{ notify_service != '' and (raise_water or raise_room) }}"
+            then:
+              - service: "{{ notify_service }}"
+                data:
+                  title: Aerosmart – Überschuss
+                  message: >
+                    {%- set n = '%.1f' -%}
+                    {{ export_text }}{{ ', Niedertarif' if cheap_rate != '' and is_state(cheap_rate, 'on') }}.
+                    {%- if raise_water %}
+                    Brauchwasser {{ (n | format(water_current | float(0))) | replace('.', ',') }} °C,
+                    Soll {{ water_target | round(1) | string | replace('.', ',') }} → {{ boost_temperature | round(1) | string | replace('.', ',') }} °C.
+                    {%- endif %}
+                    {%- if raise_room %}
+                    Raum {{ (n | format(room_current | float(0))) | replace('.', ',') }} °C,
+                    Soll {{ room_target | round(1) | string | replace('.', ',') }} → {{ room_boost | round(1) | string | replace('.', ',') }} °C.
+                    {%- endif %}
       - alias: Kein Überschuss – zurücksetzen
         conditions:
           - "{{ trigger.id in ['stop', 'check'] and not surplus }}"
@@ -248,41 +330,67 @@ action:
           - variables:
               water_before: "{{ states(water_helper) | float(0) }}"
               room_before: "{{ states(room_helper) | float(0) if use_room else 0 }}"
+              # Only restore if nobody changed the setpoint meanwhile.
+              restore_water: >
+                {{ water_before > 0
+                   and (water_target - boost_temperature) | abs < 0.1 }}
+              restore_room: >
+                {{ room_before > 0
+                   and (room_target - [room_before + room_raise, room_max] | min) | abs < 0.05 }}
+          - if:
+              - "{{ restore_water }}"
+            then:
+              - service: water_heater.set_temperature
+                target:
+                  entity_id: "{{ water_heater }}"
+                data:
+                  temperature: "{{ water_before }}"
           - if:
               - "{{ water_before > 0 }}"
             then:
-              # Only restore if nobody changed the setpoint meanwhile.
-              - if:
-                  - >
-                    {{ (state_attr(water_heater, 'temperature') | float(0)
-                        - boost_temperature) | abs < 0.1 }}
-                then:
-                  - service: water_heater.set_temperature
-                    target:
-                      entity_id: "{{ water_heater }}"
-                    data:
-                      temperature: "{{ water_before }}"
               - service: input_number.set_value
                 target:
                   entity_id: "{{ water_helper }}"
                 data:
                   value: 0
           - if:
+              - "{{ restore_room }}"
+            then:
+              - service: climate.set_temperature
+                target:
+                  entity_id: "{{ climate }}"
+                data:
+                  temperature: "{{ room_before }}"
+          - if:
               - "{{ room_before > 0 }}"
             then:
-              - if:
-                  - >
-                    {{ (state_attr(climate, 'temperature') | float(0)
-                        - [room_before + room_raise,
-                           state_attr(climate, 'max_temp') | float(26)] | min) | abs < 0.05 }}
-                then:
-                  - service: climate.set_temperature
-                    target:
-                      entity_id: "{{ climate }}"
-                    data:
-                      temperature: "{{ room_before }}"
               - service: input_number.set_value
                 target:
                   entity_id: "{{ room_helper }}"
                 data:
                   value: 0
+          - if:
+              - "{{ notify_service != '' and (water_before > 0 or room_before > 0) }}"
+            then:
+              - service: "{{ notify_service }}"
+                data:
+                  title: Aerosmart – kein Überschuss mehr
+                  message: >
+                    {%- set n = '%.1f' -%}
+                    {{ export_text }}.
+                    {%- if water_before > 0 %}
+                    Brauchwasser {{ (n | format(water_current | float(0))) | replace('.', ',') }} °C,
+                    {% if restore_water -%}
+                    Soll {{ water_target | round(1) | string | replace('.', ',') }} → {{ water_before | round(1) | string | replace('.', ',') }} °C.
+                    {%- else -%}
+                    Soll {{ water_target | round(1) | string | replace('.', ',') }} °C bleibt (zwischenzeitlich geändert).
+                    {%- endif %}
+                    {%- endif %}
+                    {%- if room_before > 0 %}
+                    Raum {{ (n | format(room_current | float(0))) | replace('.', ',') }} °C,
+                    {% if restore_room -%}
+                    Soll {{ room_target | round(1) | string | replace('.', ',') }} → {{ room_before | round(1) | string | replace('.', ',') }} °C.
+                    {%- else -%}
+                    Soll {{ room_target | round(1) | string | replace('.', ',') }} °C bleibt (zwischenzeitlich geändert).
+                    {%- endif %}
+                    {%- endif %}
