@@ -2,8 +2,8 @@ blueprint:
   name: Aerosmart PV-Überschuss (SG-Box-Ersatz)
   description: >
     Speichert PV-Überschuss als Wärme – wie die Smart-Grid-Funktion der
-    drexel-und-weiss SG-Box, nur mit dem Einspeise-Sensor aus Home Assistant
-    statt dem Kontakt des Wechselrichters.
+    drexel-und-weiss SG-Box, nur mit einem Netz- oder Einspeise-Sensor aus
+    Home Assistant statt dem Kontakt des Wechselrichters.
 
 
     **Überschuss** (Einspeisung über der Schwelle, oder optional Niedertarif):
@@ -31,13 +31,23 @@ blueprint:
       name: Überschuss
       input:
         export_sensor:
-          name: Einspeise-Sensor
-          description: Leistung, die ins Netz eingespeist wird, in W (positiv).
+          name: Netz- oder Einspeise-Sensor
+          description: Leistung am Netzanschluss in W.
           selector:
             entity:
               filter:
                 - domain: sensor
                   device_class: power
+        export_sign:
+          name: Einspeisung ist
+          default: "1"
+          selector:
+            select:
+              options:
+                - label: positiv (Einspeise-Sensor)
+                  value: "1"
+                - label: negativ (Netz-Sensor, Bezug positiv)
+                  value: "-1"
         threshold:
           name: Schwelle
           description: Ab dieser Einspeisung gilt Überschuss.
@@ -147,10 +157,13 @@ max_exceeded: silent
 
 trigger_variables:
   cheap_rate: !input cheap_rate
+  export_sign: !input export_sign
 
 trigger:
+  # Export as a positive number, whatever the sensor's sign convention.
   - platform: numeric_state
     entity_id: !input export_sensor
+    value_template: "{{ state.state | float(0) * export_sign | int(1) }}"
     above: !input threshold
     for:
       minutes: !input on_delay
@@ -166,6 +179,7 @@ trigger:
     id: start
   - platform: numeric_state
     entity_id: !input export_sensor
+    value_template: "{{ state.state | float(0) * export_sign | int(1) }}"
     below: !input threshold
     for:
       minutes: !input off_delay
@@ -189,7 +203,7 @@ variables:
   room_raise: !input room_raise
   use_room: "{{ climate != '' and room_helper != '' }}"
   surplus: >
-    {{ states(export_sensor) | float(0) > threshold
+    {{ states(export_sensor) | float(0) * export_sign | int(1) > threshold
        or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
 
 action:

@@ -93,8 +93,8 @@ Weiss Aerosmart**:
 
 Ohne SG-Box kann Home Assistant deren Smart-Grid-Funktion übernehmen: Das
 Blueprint **Aerosmart PV-Überschuss** hebt bei Einspeisung über einer Schwelle
-die Sollwerte an und setzt sie danach zurück – wie die SG-Box, aber mit dem
-Einspeise-Sensor statt dem Kontakt des Wechselrichters.
+die Sollwerte an und setzt sie danach zurück – wie die SG-Box, aber mit einem
+Netz- oder Einspeise-Sensor statt dem Kontakt des Wechselrichters.
 
 [![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fkocher%2Fha-drexel-weiss-fernwartungsmodul%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fdrexel%2Fpv_ueberschuss.yaml)
 
@@ -106,6 +106,8 @@ Einspeise-Sensor statt dem Kontakt des Wechselrichters.
 - Ein- und Ausschaltverzögerung (Standard 5 / 15 min) verhindern Hin- und
   Herschalten bei Wolken. Hat jemand den Sollwert während der Anhebung
   geändert, bleibt dessen Wert stehen.
+- Als Sensor eignet sich ein Einspeise-Sensor (Einspeisung positiv) oder ein
+  Netz-Sensor, bei dem Einspeisung negativ ist – im Blueprint auswählbar.
 
 Die vorherigen Sollwerte merkt sich das Blueprint in Zahlenwert-Helfern
 (Minimum 0, Maximum 100, Schrittweite 0,1), damit sie einen Neustart
