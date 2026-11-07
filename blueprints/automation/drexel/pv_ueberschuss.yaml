@@ -1,0 +1,274 @@
+blueprint:
+  name: Aerosmart PV-Überschuss (SG-Box-Ersatz)
+  description: >
+    Speichert PV-Überschuss als Wärme – wie die Smart-Grid-Funktion der
+    drexel-und-weiss SG-Box, nur mit dem Einspeise-Sensor aus Home Assistant
+    statt dem Kontakt des Wechselrichters.
+
+
+    **Überschuss** (Einspeisung über der Schwelle, oder optional Niedertarif):
+    liegt der Boiler unter der Starttemperatur, wird Brauchwasser-Soll auf die
+    Ladetemperatur gesetzt (SG-Box: 55 °C ab unter 52 °C). Optional wird
+    Raum-Soll angehoben (SG-Box: 0,5–3 K).
+
+    **Kein Überschuss mehr**: die vorherigen Sollwerte werden
+    wiederhergestellt. Hat jemand den Sollwert in der Zwischenzeit geändert,
+    bleibt dessen Wert stehen.
+
+
+    Die vorherigen Sollwerte werden in Helfern gespeichert, damit sie einen
+    Neustart überstehen. Vorher unter Einstellungen → Geräte & Dienste →
+    Helfer je einen **Zahlenwert-Helfer** anlegen: Minimum 0, Maximum 100,
+    Schrittweite 0,1, Anzeigemodus Eingabefeld. Einen für Brauchwasser und –
+    falls Raum genutzt wird – einen für Raum. 0 bedeutet „keine Anhebung
+    aktiv“.
+  domain: automation
+  source_url: https://github.com/kocher/ha-drexel-weiss-fernwartungsmodul/blob/main/blueprints/automation/drexel/pv_ueberschuss.yaml
+  homeassistant:
+    min_version: 2024.8.0
+  input:
+    surplus:
+      name: Überschuss
+      input:
+        export_sensor:
+          name: Einspeise-Sensor
+          description: Leistung, die ins Netz eingespeist wird, in W (positiv).
+          selector:
+            entity:
+              filter:
+                - domain: sensor
+                  device_class: power
+        threshold:
+          name: Schwelle
+          description: Ab dieser Einspeisung gilt Überschuss.
+          default: 1500
+          selector:
+            number:
+              min: 100
+              max: 20000
+              step: 100
+              unit_of_measurement: W
+              mode: box
+        on_delay:
+          name: Einschaltverzögerung
+          description: So lange muss die Einspeisung über der Schwelle liegen.
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 60
+              unit_of_measurement: min
+        off_delay:
+          name: Ausschaltverzögerung
+          description: >
+            So lange muss die Einspeisung unter der Schwelle liegen, bevor die
+            Sollwerte zurückgesetzt werden. Bei Wolken nicht zu kurz wählen.
+          default: 15
+          selector:
+            number:
+              min: 1
+              max: 120
+              unit_of_measurement: min
+        cheap_rate:
+          name: Niedertarif (optional)
+          description: >
+            Ist diese Entität „an“, wird wie bei Überschuss angehoben
+            (SG-Box-Eingang „Smart Meter“). Leer lassen, wenn nicht vorhanden.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: [binary_sensor, input_boolean, switch]
+    water:
+      name: Brauchwasser
+      input:
+        water_heater:
+          name: Brauchwasser
+          selector:
+            entity:
+              filter:
+                - domain: water_heater
+                  integration: drexel
+        water_helper:
+          name: Helfer für den vorherigen Brauchwasser-Soll
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+        boost_temperature:
+          name: Ladetemperatur
+          default: 55
+          selector:
+            number:
+              min: 40
+              max: 55
+              unit_of_measurement: °C
+        start_below:
+          name: Starttemperatur
+          description: Nur laden, wenn der Boiler kälter ist.
+          default: 52
+          selector:
+            number:
+              min: 30
+              max: 55
+              unit_of_measurement: °C
+    room:
+      name: Raum (optional)
+      collapsed: true
+      input:
+        climate:
+          name: Raum
+          description: Leer lassen, um Raum-Soll nicht anzuheben.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: climate
+                  integration: drexel
+        room_helper:
+          name: Helfer für den vorherigen Raum-Soll
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+        room_raise:
+          name: Anhebung
+          default: 1
+          selector:
+            number:
+              min: 0.5
+              max: 3
+              step: 0.5
+              unit_of_measurement: K
+
+mode: queued
+max_exceeded: silent
+
+trigger_variables:
+  cheap_rate: !input cheap_rate
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input export_sensor
+    above: !input threshold
+    for:
+      minutes: !input on_delay
+    id: start
+  - platform: template
+    value_template: "{{ cheap_rate != '' and is_state(cheap_rate, 'on') }}"
+    id: start
+  # The boiler cooled down while the surplus continues.
+  - platform: numeric_state
+    entity_id: !input water_heater
+    attribute: current_temperature
+    below: !input start_below
+    id: start
+  - platform: numeric_state
+    entity_id: !input export_sensor
+    below: !input threshold
+    for:
+      minutes: !input off_delay
+    id: stop
+  - platform: template
+    value_template: "{{ cheap_rate != '' and is_state(cheap_rate, 'off') }}"
+    id: stop
+  - platform: homeassistant
+    event: start
+    id: check
+
+variables:
+  export_sensor: !input export_sensor
+  threshold: !input threshold
+  water_heater: !input water_heater
+  water_helper: !input water_helper
+  boost_temperature: !input boost_temperature
+  start_below: !input start_below
+  climate: !input climate
+  room_helper: !input room_helper
+  room_raise: !input room_raise
+  use_room: "{{ climate != '' and room_helper != '' }}"
+  surplus: >
+    {{ states(export_sensor) | float(0) > threshold
+       or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
+
+action:
+  - choose:
+      - alias: Überschuss – anheben
+        conditions:
+          - "{{ trigger.id in ['start', 'check'] and surplus }}"
+        sequence:
+          - if:
+              - "{{ states(water_helper) | float(0) == 0 }}"
+              - "{{ state_attr(water_heater, 'current_temperature') | float(99) < start_below }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ water_helper }}"
+                data:
+                  value: "{{ state_attr(water_heater, 'temperature') }}"
+              - service: water_heater.set_temperature
+                target:
+                  entity_id: "{{ water_heater }}"
+                data:
+                  temperature: "{{ boost_temperature }}"
+          - if:
+              - "{{ use_room and states(room_helper) | float(0) == 0 }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ room_helper }}"
+                data:
+                  value: "{{ state_attr(climate, 'temperature') }}"
+              - service: climate.set_temperature
+                target:
+                  entity_id: "{{ climate }}"
+                data:
+                  temperature: >
+                    {{ [state_attr(climate, 'temperature') | float + room_raise,
+                        state_attr(climate, 'max_temp') | float(26)] | min }}
+      - alias: Kein Überschuss – zurücksetzen
+        conditions:
+          - "{{ trigger.id in ['stop', 'check'] and not surplus }}"
+        sequence:
+          - variables:
+              water_before: "{{ states(water_helper) | float(0) }}"
+              room_before: "{{ states(room_helper) | float(0) if use_room else 0 }}"
+          - if:
+              - "{{ water_before > 0 }}"
+            then:
+              # Only restore if nobody changed the setpoint meanwhile.
+              - if:
+                  - >
+                    {{ (state_attr(water_heater, 'temperature') | float(0)
+                        - boost_temperature) | abs < 0.1 }}
+                then:
+                  - service: water_heater.set_temperature
+                    target:
+                      entity_id: "{{ water_heater }}"
+                    data:
+                      temperature: "{{ water_before }}"
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ water_helper }}"
+                data:
+                  value: 0
+          - if:
+              - "{{ room_before > 0 }}"
+            then:
+              - if:
+                  - >
+                    {{ (state_attr(climate, 'temperature') | float(0)
+                        - [room_before + room_raise,
+                           state_attr(climate, 'max_temp') | float(26)] | min) | abs < 0.05 }}
+                then:
+                  - service: climate.set_temperature
+                    target:
+                      entity_id: "{{ climate }}"
+                    data:
+                      temperature: "{{ room_before }}"
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ room_helper }}"
+                data:
+                  value: 0

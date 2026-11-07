@@ -89,6 +89,28 @@ Weiss Aerosmart**:
 - **Werte, die das Modul nicht liefert** (z. B. für nicht vorhandene
   Funktionen wie Heizstufe 2), zeigt Home Assistant wie das Web-Interface als 0.
 
+## PV-Überschuss nutzen (Blueprint)
+
+Ohne SG-Box kann Home Assistant deren Smart-Grid-Funktion übernehmen: Das
+Blueprint **Aerosmart PV-Überschuss** hebt bei Einspeisung über einer Schwelle
+die Sollwerte an und setzt sie danach zurück – wie die SG-Box, aber mit dem
+Einspeise-Sensor statt dem Kontakt des Wechselrichters.
+
+[![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fkocher%2Fha-drexel-weiss-fernwartungsmodul%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fdrexel%2Fpv_ueberschuss.yaml)
+
+- **Brauchwasser**: Ist der Boiler kälter als 52 °C, wird Brauchwasser-Soll
+  auf 55 °C gesetzt (beides einstellbar).
+- **Raum** (optional): Raum-Soll wird um 0,5–3 K angehoben.
+- **Niedertarif** (optional): ein Schalter oder Binärsensor, der wie
+  Überschuss wirkt.
+- Ein- und Ausschaltverzögerung (Standard 5 / 15 min) verhindern Hin- und
+  Herschalten bei Wolken. Hat jemand den Sollwert während der Anhebung
+  geändert, bleibt dessen Wert stehen.
+
+Die vorherigen Sollwerte merkt sich das Blueprint in Zahlenwert-Helfern
+(Minimum 0, Maximum 100, Schrittweite 0,1), damit sie einen Neustart
+überstehen – je einen für Brauchwasser und Raum vorher anlegen.
+
 ## Technik
 
 Pro Abfrageintervall liest die Integration drei Bereiche des Moduls (`values`,
