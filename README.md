@@ -106,9 +106,11 @@ Netz- oder Einspeise-Sensor statt dem Kontakt des Wechselrichters.
 - Ein- und Ausschaltverzögerung (Standard 5 / 15 min) verhindern Hin- und
   Herschalten bei Wolken. Hat jemand den Sollwert während der Anhebung
   geändert, bleibt dessen Wert stehen.
-- **Benachrichtigung** (optional): beim Anheben und Zurücksetzen, mit
-  Einspeisung, aktueller Temperatur und Sollwerten, z. B. „Einspeisung
-  2480 W. Brauchwasser 45,0 °C, Soll 48,0 → 55,0 °C.“
+- **Benachrichtigung**: beim Anheben und Zurücksetzen, mit Einspeisung,
+  aktueller Temperatur und Sollwerten, z. B. „Einspeisung 2480 W.
+  Brauchwasser 45,0 °C, Soll 48,0 → 55,0 °C.“ Vorbelegt ist eine
+  Benachrichtigung in Home Assistant; die Aktion lässt sich wie in jeder
+  Automation auswählen (z. B. das Telefon) oder löschen.
 - Als Sensor eignet sich ein Einspeise-Sensor (Einspeisung positiv) oder ein
   Netz-Sensor, bei dem Einspeisung negativ ist – im Blueprint auswählbar.
 

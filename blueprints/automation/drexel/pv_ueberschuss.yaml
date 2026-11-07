@@ -192,17 +192,22 @@ blueprint:
       description: Bescheid geben, wenn angehoben oder zurückgesetzt wird.
       collapsed: true
       input:
-        notify_service:
-          name: Benachrichtigungsdienst
+        notify_action:
+          name: Benachrichtigung
           description: >
-            Aktion, die die Nachricht verschickt, z. B.
-            `notify.mobile_app_mein_telefon` oder
-            `notify.persistent_notification` (Benachrichtigung in Home
-            Assistant). Die Nachricht enthält Einspeisung, aktuelle Temperatur
-            und Sollwerte. Leer lassen für keine Benachrichtigung.
-          default: ""
+            Aktionen, die beim Anheben und Zurücksetzen ausgeführt werden.
+            Vorbelegt ist eine Benachrichtigung in Home Assistant; über „⋮ →
+            Aktion ändern“ z. B. das Telefon (`notify.mobile_app_…`) wählen.
+            Titel und Nachricht stehen als `{{ title }}` und `{{ message }}`
+            bereit – die Nachricht enthält Einspeisung, aktuelle Temperatur und
+            Sollwerte. Alle Aktionen löschen für keine Benachrichtigung.
+          default:
+            - action: notify.persistent_notification
+              data:
+                title: "{{ title }}"
+                message: "{{ message }}"
           selector:
-            text:
+            action: {}
 
 mode: queued
 max_exceeded: silent
@@ -253,7 +258,6 @@ variables:
   climate: !input climate
   room_helper: !input room_helper
   room_raise: !input room_raise
-  notify_service: !input notify_service
   use_room: "{{ climate != '' and room_helper != '' }}"
   export: "{{ (states(export_sensor) | float(0) * export_sign | int(1)) | round(0) | int }}"
   export_text: >
@@ -307,10 +311,9 @@ action:
                 data:
                   temperature: "{{ room_boost }}"
           - if:
-              - "{{ notify_service != '' and (raise_water or raise_room) }}"
+              - "{{ raise_water or raise_room }}"
             then:
-              - service: "{{ notify_service }}"
-                data:
+              - variables:
                   title: Aerosmart – Überschuss
                   message: >
                     {%- set n = '%.1f' -%}
@@ -323,6 +326,7 @@ action:
                     Raum {{ (n | format(room_current | float(0))) | replace('.', ',') }} °C,
                     Soll {{ room_target | round(1) | string | replace('.', ',') }} → {{ room_boost | round(1) | string | replace('.', ',') }} °C.
                     {%- endif %}
+              - sequence: !input notify_action
       - alias: Kein Überschuss – zurücksetzen
         conditions:
           - "{{ trigger.id in ['stop', 'check'] and not surplus }}"
@@ -370,10 +374,9 @@ action:
                 data:
                   value: 0
           - if:
-              - "{{ notify_service != '' and (water_before > 0 or room_before > 0) }}"
+              - "{{ water_before > 0 or room_before > 0 }}"
             then:
-              - service: "{{ notify_service }}"
-                data:
+              - variables:
                   title: Aerosmart – kein Überschuss mehr
                   message: >
                     {%- set n = '%.1f' -%}
@@ -394,3 +397,4 @@ action:
                     Soll {{ room_target | round(1) | string | replace('.', ',') }} °C bleibt (zwischenzeitlich geändert).
                     {%- endif %}
                     {%- endif %}
+              - sequence: !input notify_action
