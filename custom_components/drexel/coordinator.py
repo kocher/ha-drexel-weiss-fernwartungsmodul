@@ -11,6 +11,7 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -168,18 +169,20 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
             await self._async_post_json(
                 write_body(parameter.parameter_id, parameter.hardware_id, raw)
             )
+            confirmed = False
             for _ in range(WRITE_CONFIRM_ATTEMPTS):
                 await asyncio.sleep(WRITE_CONFIRM_INTERVAL)
                 payload = await self._async_get_json(lastchanges)
                 if newest_row(payload, parameter.parameter_id, owner) > before:
+                    confirmed = True
                     break
-            else:
-                _LOGGER.warning(
-                    "Änderung von %s wurde vom Fernwartungsmodul nicht bestätigt",
-                    parameter.key,
-                )
-        # Confirmed (or given up): show the new value right away, not debounced.
+        # Confirmed (or given up): show the current value right away, not debounced.
         await self.async_refresh()
+        # Fail the action so automations notice and can retry.
+        if not confirmed:
+            raise HomeAssistantError(
+                f"Änderung von {parameter.key} wurde vom Fernwartungsmodul nicht bestätigt"
+            )
 
     async def _async_get_json(self, url: str) -> Any:
         try:

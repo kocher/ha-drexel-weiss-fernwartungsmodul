@@ -129,7 +129,9 @@ Einspeise-Sensor statt dem Kontakt des Wechselrichters.
   stehen.
 - **Ausfälle**: Liefert der Einspeise-Sensor keinen Wert, wird weder angehoben
   noch zurückgesetzt. Ist das Modul beim Zurücksetzen nicht erreichbar, wird
-  das nachgeholt, sobald es wieder antwortet.
+  das nachgeholt, sobald es wieder antwortet. Übernimmt es einen Sollwert
+  nicht, versucht das Blueprint es bis zu fünfmal im Minutenabstand und
+  meldet sonst „Zurücksetzen fehlgeschlagen“. Der Helfer bleibt dann stehen.
 - **Benachrichtigung**: beim Anheben und Zurücksetzen, mit Einspeisung,
   aktueller Temperatur und Sollwerten, z. B. „Einspeisung 2480 W.
   Brauchwasser 45,0 °C, Soll 48,0 → 55,0 °C.“ Vorbelegt ist eine
