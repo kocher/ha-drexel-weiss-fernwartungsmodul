@@ -7,10 +7,10 @@ blueprint:
 
 
     **Überschuss** (Einspeisung über Leistungsaufnahme der Wärmepumpe plus
-    Mindest-Einspeisung, oder optional Niedertarif): liegt der Boiler unter
-    der Starttemperatur, wird Brauchwasser-Soll auf die Ladetemperatur
-    gesetzt (SG-Box: 55 °C ab unter 52 °C). Optional wird Raum-Soll
-    angehoben (SG-Box: 0,5–3 K).
+    Mindest-Einspeisung): liegt der Warmwasserspeicher unter der
+    Starttemperatur, wird Brauchwasser-Soll auf die Ladetemperatur gesetzt
+    (SG-Box: 55 °C ab unter 52 °C, gemessen am Fühler der Wärmepumpe). Optional wird Raum-Soll angehoben
+    (SG-Box: 0,5–3 K), auch bei Niedertarif.
 
     **Kein Überschuss mehr** (Einspeisung unter der Mindest-Einspeisung):
     die vorherigen Sollwerte werden wiederhergestellt. Hat jemand den
@@ -119,9 +119,11 @@ blueprint:
         cheap_rate:
           name: Niedertarif (optional)
           description: >
-            Ist diese Entität „an“, wird wie bei Überschuss angehoben
-            (SG-Box-Eingang „Smart Meter“), bei „aus“ zurückgesetzt. Leer
-            lassen, wenn nicht vorhanden.
+            Ist diese Entität „an“, wird Raum-Soll wie bei Überschuss
+            angehoben, bei „aus“ zurückgesetzt (SG-Box-Eingang „Smart
+            Meter“). Brauchwasser bleibt unverändert – auch die SG-Box gibt
+            bei Niedertarif nur die normale Ladung frei, die die Wärmepumpe
+            ohnehin macht. Leer lassen, wenn nicht vorhanden.
           default: ""
           selector:
             entity:
@@ -139,6 +141,20 @@ blueprint:
               filter:
                 - domain: water_heater
                   integration: drexel
+        tank_sensor:
+          name: Speicherfühler (optional)
+          description: >
+            Temperatur, mit der Starttemperatur verglichen wird. Leer lassen,
+            dann wird wie bei der SG-Box „Warmwasserspeicher WP“ (T_BW_WP) der
+            Wärmepumpe verwendet. Der „Boiler“-Fühler oben im Speicher, den
+            das Web-Interface anzeigt, ist meist wärmer und ändert sich beim
+            Laden langsamer.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: sensor
+                  device_class: temperature
         water_helper:
           name: Helfer für den vorherigen Brauchwasser-Soll
           description: >
@@ -163,8 +179,10 @@ blueprint:
         start_below:
           name: Starttemperatur
           description: >
-            Nur anheben, wenn der Boiler kälter ist – sonst lohnt die Ladung
-            nicht. SG-Box: 52 °C.
+            Nur anheben, wenn der Warmwasserspeicher kälter ist – sonst lohnt
+            die Ladung nicht. Gemessen wird wie bei der SG-Box am Fühler der
+            Wärmepumpe („Warmwasserspeicher WP“, T_BW_WP), nicht am Boiler-
+            Fühler oben im Speicher. SG-Box: 52 °C.
           default: 52
           selector:
             number:
@@ -269,6 +287,9 @@ trigger_variables:
   cheap_rate: !input cheap_rate
   export_sign: !input export_sign
   heat_pump_power: !input heat_pump_power
+  water_heater: !input water_heater
+  start_below: !input start_below
+  tank_sensor_input: !input tank_sensor
 
 trigger:
   # Export as a positive number, whatever the sensor's sign convention.
@@ -285,11 +306,14 @@ trigger:
   - platform: template
     value_template: "{{ cheap_rate != '' and is_state(cheap_rate, 'on') }}"
     id: start
-  # The boiler cooled down while the surplus continues.
-  - platform: numeric_state
-    entity_id: !input water_heater
-    attribute: current_temperature
-    below: !input start_below
+  # The tank cooled down while the surplus continues. Like the SG-Box,
+  # measured at the heat pump's sensor T_BW_WP (parameter 214).
+  - platform: template
+    value_template: >
+      {%- set s = tank_sensor_input or device_entities(device_id(water_heater))
+                  | select('is_state_attr', 'parameter_id', 214) | first | default('') -%}
+      {%- set t = (states(s) if s else state_attr(water_heater, 'current_temperature')) | float(0) -%}
+      {{ 0 < t < start_below }}
     id: delayed
   # Stop below the minimum export; whether the heat pump runs is not checked.
   - platform: numeric_state
@@ -328,10 +352,18 @@ variables:
        or (use_room and states(room_helper) | float(0) > 0) }}
   surplus_threshold: >
     {{ reserve if raised else reserve + heat_pump_power | float(0) }}
+  pv_surplus: "{{ export > surplus_threshold }}"
   surplus: >
-    {{ export > surplus_threshold
-       or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
-  water_current: "{{ state_attr(water_heater, 'current_temperature') }}"
+    {{ pv_surplus or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
+  # T_BW_WP like the SG-Box; the water heater shows the upper sensor.
+  tank_sensor: >
+    {{ tank_sensor_input or device_entities(device_id(water_heater))
+       | select('is_state_attr', 'parameter_id', 214) | first | default('') }}
+  # 0 or unavailable means unknown.
+  water_current: >
+    {%- set t = (states(tank_sensor) if tank_sensor
+                 else state_attr(water_heater, 'current_temperature')) | float(0) -%}
+    {{ t if t > 0 else none }}
   water_target: "{{ state_attr(water_heater, 'temperature') | float(0) }}"
   room_current: "{{ state_attr(climate, 'current_temperature') if use_room else none }}"
   room_target: "{{ state_attr(climate, 'temperature') | float(0) if use_room else 0 }}"
@@ -365,13 +397,15 @@ action:
                   - stop: Überschuss während der Einschaltverzögerung beendet
           - variables:
               export: "{{ (states(export_sensor) | float(0) * export_sign | int(1)) | round(0) | int }}"
+              pv_surplus: "{{ export > surplus_threshold }}"
               export_text: >
                 {{ 'Einspeisung ' ~ export ~ ' W' if export >= 0
                    else 'Netzbezug ' ~ (-export) ~ ' W' }}
           - variables:
+              # Low tariff alone doesn't touch hot water (SG-Box).
               raise_water: >
-                {{ states(water_helper) | float(0) == 0
-                   and water_current | float(99) < start_below }}
+                {{ pv_surplus and states(water_helper) | float(0) == 0
+                   and water_current is number and water_current < start_below }}
               raise_room: "{{ use_room and states(room_helper) | float(0) == 0 }}"
               room_boost: "{{ [room_target + room_raise, room_max] | min }}"
           - if:
@@ -414,7 +448,7 @@ action:
                     {%- set n = '%.1f' -%}
                     {{ export_text }}{{ ', Niedertarif' if cheap_rate != '' and is_state(cheap_rate, 'on') }}.
                     {%- if raise_water %}
-                    Brauchwasser {{ (n | format(water_current | float(0))) | replace('.', ',') }} °C,
+                    Brauchwasser {{ (n | format(water_current) | replace('.', ',')) if water_current is number else '?' }} °C,
                     Soll {{ water_target | round(1) | string | replace('.', ',') }} → {{ boost_temperature | round(1) | string | replace('.', ',') }} °C.
                     {%- endif %}
                     {%- if room_raised %}
@@ -477,7 +511,7 @@ action:
                     {%- set n = '%.1f' -%}
                     {{ export_text }}.
                     {%- if water_before > 0 %}
-                    Brauchwasser {{ (n | format(water_current | float(0))) | replace('.', ',') }} °C,
+                    Brauchwasser {{ (n | format(water_current) | replace('.', ',')) if water_current is number else '?' }} °C,
                     {% if restore_water -%}
                     Soll {{ water_target | round(1) | string | replace('.', ',') }} → {{ water_before | round(1) | string | replace('.', ',') }} °C.
                     {%- else -%}
