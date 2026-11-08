@@ -37,7 +37,14 @@ blueprint:
           description: >
             Leistung am Netzanschluss in W, z. B. vom Smart Meter oder
             Wechselrichter. Wie das Vorzeichen zu lesen ist, legt „Einspeisung
-            ist“ fest.
+            ist“ fest. Mit Batteriespeicher, der das Netz bei null hält, besser
+            einen geglätteten Wert verwenden: Helfer „Statistik“,
+            Statistikmerkmal „Zeitlich gewichteter Durchschnitt“, Maximalalter
+            5 Minuten, Stichprobengröße leer, „Letzten Messwert behalten“ an.
+            Sonst setzen kurze
+            Einspeisespitzen beim Abschalten großer Verbraucher die
+            Ausschaltverzögerung immer wieder zurück, und die Anhebung endet
+            viel zu spät.
           selector:
             entity:
               filter:

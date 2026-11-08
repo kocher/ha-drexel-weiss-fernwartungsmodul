@@ -137,6 +137,17 @@ Einspeise-Sensor statt dem Kontakt des Wechselrichters.
   Automation auswählen (z. B. das Telefon) oder löschen.
 - Als Sensor eignet sich ein Einspeise-Sensor (Einspeisung positiv) oder ein
   Netz-Sensor, bei dem Einspeisung negativ ist – im Blueprint auswählbar.
+- **Mit Batteriespeicher** einen geglätteten Wert verwenden: Einstellungen →
+  Geräte & Dienste → Helfer → Statistik, Entität der Netz-Sensor,
+  Statistikmerkmal „Zeitlich gewichteter Durchschnitt“, Maximalalter
+  5 Minuten, Stichprobengröße leer lassen (sonst zählen nur die letzten Werte
+  statt 5 Minuten), „Letzten Messwert behalten“ einschalten (sonst wird der
+  Helfer „unbekannt“, wenn sich der Netz-Sensor 5 Minuten nicht ändert). Ein
+  Speicher, der das Netz bei null hält,
+  reagiert erst nach einigen Sekunden; schaltet ein großer Verbraucher ab,
+  wird kurz viel eingespeist. Jede solche Spitze startet die
+  Ausschaltverzögerung neu, die Anhebung endet dann erst, wenn es 15 Minuten
+  lang ruhig ist. Der Mittelwert folgt dem tatsächlichen Verlauf.
 
 Die vorherigen Sollwerte merkt sich das Blueprint in Zahlenwert-Helfern
 (Minimum 0, Maximum 100, Schrittweite 0,1), damit sie einen Neustart
