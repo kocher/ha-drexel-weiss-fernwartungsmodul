@@ -50,7 +50,6 @@ class DrexelClimate(CoordinatorEntity[DrexelCoordinator], ClimateEntity):
     _attr_name = "Raum"
     _attr_hvac_modes = [HVACMode.HEAT]
     _attr_hvac_mode = HVACMode.HEAT
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(self, coordinator: DrexelCoordinator, target: Parameter) -> None:
         super().__init__(coordinator)
@@ -86,14 +85,24 @@ class DrexelClimate(CoordinatorEntity[DrexelCoordinator], ClimateEntity):
         return None if parameter is None else self.coordinator.raw_value(parameter)
 
     @property
-    def current_temperature(self) -> float | None:
+    def _current_temperature(self) -> float | None:
         if self._current is None:
             return None
         return self._current.to_native(self._value(self._current))
 
     @property
-    def target_temperature(self) -> float | None:
+    def _target_temperature(self) -> float | None:
         return self._target.to_native(self._value(self._target))
+
+    # HA 2026.11 renamed the temperature members to native_*.
+    if hasattr(ClimateEntity, "native_temperature_unit"):
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+        native_current_temperature = _current_temperature
+        native_target_temperature = _target_temperature
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
+        current_temperature = _current_temperature
+        target_temperature = _target_temperature
 
     @property
     def hvac_action(self) -> HVACAction | None:

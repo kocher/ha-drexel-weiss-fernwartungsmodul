@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from homeassistant.const import EntityCategory
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo, DeviceRegistry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import Parameter
 from .const import DEVICE_LABELS, DOMAIN
 from .coordinator import DrexelCoordinator
+
+# HA 2026.11 references the parent device by registry id (via_device_id).
+_VIA_DEVICE_ID = "via_device_id" in inspect.signature(
+    DeviceRegistry.async_get_or_create
+).parameters
 
 
 def hub_device_info(coordinator: DrexelCoordinator) -> DeviceInfo:
@@ -34,7 +40,11 @@ def hardware_device_info(coordinator: DrexelCoordinator, hardware_id: int) -> De
         model=hardware.model if hardware else None,
         serial_number=hardware.serial_number if hardware else None,
         sw_version=hardware.software_version if hardware else None,
-        via_device=(DOMAIN, coordinator.entry.entry_id),
+        **(
+            {"via_device_id": coordinator.hub_device_id}
+            if _VIA_DEVICE_ID
+            else {"via_device": (DOMAIN, coordinator.entry.entry_id)}
+        ),
     )
 
 

@@ -76,6 +76,8 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         self.parameters: list[Parameter] = []
         self.owners: dict[int, int] = {}
         self._write_lock = asyncio.Lock()
+        # Registry id of the module's device, set during setup.
+        self.hub_device_id: str | None = None
 
     def environment_parameter(self, parameter_id: int) -> Parameter | None:
         """The environment-wide control of a parameter (e.g. Raum-Soll)."""

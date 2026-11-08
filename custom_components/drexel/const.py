@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from homeassistant.components.number import NumberDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import (
-    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     UnitOfTemperature,
@@ -15,6 +14,13 @@ from homeassistant.const import (
     UnitOfVolume,
     UnitOfVolumeFlowRate,
 )
+
+try:  # HA 2026.11+
+    from homeassistant.const import UnitOfRatio
+
+    PARTS_PER_MILLION: str = UnitOfRatio.PARTS_PER_MILLION
+except ImportError:
+    from homeassistant.const import CONCENTRATION_PARTS_PER_MILLION as PARTS_PER_MILLION
 
 DOMAIN = "drexel"
 
@@ -57,7 +63,7 @@ UNITS = {
     ),
     "K": UnitDef(UnitOfTemperature.KELVIN),
     "ppm": UnitDef(
-        CONCENTRATION_PARTS_PER_MILLION, SensorDeviceClass.CO2, NumberDeviceClass.CO2
+        PARTS_PER_MILLION, SensorDeviceClass.CO2, NumberDeviceClass.CO2
     ),
     "1/min": UnitDef(REVOLUTIONS_PER_MINUTE),
     "h": UnitDef(UnitOfTime.HOURS, SensorDeviceClass.DURATION, NumberDeviceClass.DURATION),

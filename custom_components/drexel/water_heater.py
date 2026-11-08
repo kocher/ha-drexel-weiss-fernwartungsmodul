@@ -45,7 +45,6 @@ class DrexelWaterHeater(CoordinatorEntity[DrexelCoordinator], WaterHeaterEntity)
 
     _attr_has_entity_name = True
     _attr_name = "Brauchwasser"
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = WaterHeaterEntityFeature.TARGET_TEMPERATURE
     _attr_current_operation = STATE_HEAT_PUMP
     _attr_operation_list = [STATE_HEAT_PUMP]
@@ -63,14 +62,24 @@ class DrexelWaterHeater(CoordinatorEntity[DrexelCoordinator], WaterHeaterEntity)
         self._attr_target_temperature_step = target.to_native(target.step)
 
     @property
-    def current_temperature(self) -> float | None:
+    def _current_temperature(self) -> float | None:
         if self._current is None:
             return None
         return self._current.to_native(self.coordinator.raw_value(self._current))
 
     @property
-    def target_temperature(self) -> float | None:
+    def _target_temperature(self) -> float | None:
         return self._target.to_native(self.coordinator.raw_value(self._target))
+
+    # HA 2026.11 renamed the temperature members to native_*.
+    if hasattr(WaterHeaterEntity, "native_temperature_unit"):
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+        native_current_temperature = _current_temperature
+        native_target_temperature = _target_temperature
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
+        current_temperature = _current_temperature
+        target_temperature = _target_temperature
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is not None:
