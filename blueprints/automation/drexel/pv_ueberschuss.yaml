@@ -7,14 +7,14 @@ blueprint:
 
 
     **Überschuss** (Einspeisung über Leistungsaufnahme der Wärmepumpe plus
-    Reserve, oder optional Niedertarif): liegt der Boiler unter der
-    Starttemperatur, wird Brauchwasser-Soll auf die Ladetemperatur gesetzt
-    (SG-Box: 55 °C ab unter 52 °C). Optional wird Raum-Soll angehoben
-    (SG-Box: 0,5–3 K).
+    Mindest-Einspeisung, oder optional Niedertarif): liegt der Boiler unter
+    der Starttemperatur, wird Brauchwasser-Soll auf die Ladetemperatur
+    gesetzt (SG-Box: 55 °C ab unter 52 °C). Optional wird Raum-Soll
+    angehoben (SG-Box: 0,5–3 K).
 
-    **Kein Überschuss mehr** (Einspeisung unter der Reserve, während die
-    Wärmepumpe läuft): die vorherigen Sollwerte werden wiederhergestellt. Hat jemand den Sollwert in der Zwischenzeit geändert,
-    bleibt dessen Wert stehen.
+    **Kein Überschuss mehr** (Einspeisung unter der Mindest-Einspeisung):
+    die vorherigen Sollwerte werden wiederhergestellt. Hat jemand den
+    Sollwert in der Zwischenzeit geändert, bleibt dessen Wert stehen.
 
 
     Die vorherigen Sollwerte werden in Helfern gespeichert, damit sie einen
@@ -61,8 +61,9 @@ blueprint:
           name: Leistungsaufnahme Wärmepumpe
           description: >
             Was die Wärmepumpe beim Heizen ungefähr aufnimmt, samt
-            Ventilatoren. Angehoben wird erst, wenn so viel plus die Reserve
-            eingespeist wird – dann läuft die Wärmepumpe mit eigenem Strom.
+            Ventilatoren. Angehoben wird erst, wenn so viel plus die
+            Mindest-Einspeisung eingespeist wird – dann läuft die Wärmepumpe
+            mit eigenem Strom.
             Vorgabe 500 W passt zur aerosmart m: max. 450 W laut Datenblatt,
             dazu die Ventilatoren.
           default: 500
@@ -74,13 +75,14 @@ blueprint:
               unit_of_measurement: W
               mode: box
         reserve:
-          name: Reserve
+          name: Mindest-Einspeisung
           description: >
-            So viel muss über die Wärmepumpe hinaus übrig sein. Angehoben wird
-            ab Leistungsaufnahme plus Reserve. Zurückgesetzt wird, wenn bei
-            laufender Wärmepumpe weniger als die Reserve eingespeist wird. Mit
-            einem Batteriespeicher, der das Netz bei null hält, nicht zu klein
-            wählen – sonst versorgt er die Anhebung weiter.
+            So viel soll trotz laufender Wärmepumpe noch eingespeist werden.
+            Angehoben wird ab Leistungsaufnahme plus Mindest-Einspeisung,
+            zurückgesetzt, sobald weniger als die Mindest-Einspeisung
+            eingespeist wird. Ob die Wärmepumpe gerade läuft, wird dabei nicht
+            geprüft. Mit einem Batteriespeicher, der das Netz bei null hält,
+            nicht zu klein wählen – sonst versorgt er die Anhebung weiter.
           default: 300
           selector:
             number:
@@ -93,7 +95,9 @@ blueprint:
           name: Einschaltverzögerung
           description: >
             So lange muss die Einspeisung ununterbrochen über
-            Leistungsaufnahme plus Reserve liegen, bevor angehoben wird.
+            Leistungsaufnahme plus Mindest-Einspeisung liegen, bevor angehoben
+            wird – auch wenn der Boiler während des Überschusses abkühlt oder
+            Home Assistant neu startet.
           default: 5
           selector:
             number:
@@ -103,8 +107,8 @@ blueprint:
         off_delay:
           name: Ausschaltverzögerung
           description: >
-            So lange muss die Einspeisung ununterbrochen unter der Reserve
-            liegen, bevor die Sollwerte zurückgesetzt werden. Bei Wolken nicht
+            So lange muss die Einspeisung ununterbrochen unter der
+            Mindest-Einspeisung liegen, bevor die Sollwerte zurückgesetzt werden. Bei Wolken nicht
             zu kurz wählen.
           default: 15
           selector:
@@ -268,7 +272,7 @@ trigger_variables:
 
 trigger:
   # Export as a positive number, whatever the sensor's sign convention.
-  # Start once the heat pump would still leave the reserve.
+  # Start once the heat pump would still leave the minimum export.
   - platform: numeric_state
     entity_id: !input export_sensor
     value_template: >
@@ -286,8 +290,8 @@ trigger:
     entity_id: !input water_heater
     attribute: current_temperature
     below: !input start_below
-    id: start
-  # Stop when, with the heat pump running, less than the reserve is left.
+    id: delayed
+  # Stop below the minimum export; whether the heat pump runs is not checked.
   - platform: numeric_state
     entity_id: !input export_sensor
     value_template: "{{ state.state | float(0) * export_sign | int(1) }}"
@@ -305,6 +309,7 @@ trigger:
 variables:
   export_sensor: !input export_sensor
   reserve: !input reserve
+  on_delay: !input on_delay
   water_heater: !input water_heater
   water_helper: !input water_helper
   boost_temperature: !input boost_temperature
@@ -336,11 +341,33 @@ action:
   - choose:
       - alias: Überschuss – anheben
         conditions:
-          - "{{ trigger.id in ['start', 'check'] and surplus }}"
+          - "{{ trigger.id in ['start', 'delayed', 'check'] and surplus }}"
           # Raising only; the reset below ignores them.
           - condition: and
             conditions: !input raise_conditions
         sequence:
+          # Boiler cooled down or restart: the surplus has to last for the
+          # on delay as well; give up if it ends meanwhile.
+          - if:
+              - "{{ trigger.id in ['delayed', 'check'] and on_delay | float(0) > 0 }}"
+            then:
+              - wait_for_trigger:
+                  - platform: template
+                    value_template: >
+                      {{ states(export_sensor) | float(0) * export_sign | int(1) <= surplus_threshold
+                         and not (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
+                timeout:
+                  minutes: "{{ on_delay }}"
+                continue_on_timeout: true
+              - if:
+                  - "{{ wait.trigger is not none }}"
+                then:
+                  - stop: Überschuss während der Einschaltverzögerung beendet
+          - variables:
+              export: "{{ (states(export_sensor) | float(0) * export_sign | int(1)) | round(0) | int }}"
+              export_text: >
+                {{ 'Einspeisung ' ~ export ~ ' W' if export >= 0
+                   else 'Netzbezug ' ~ (-export) ~ ' W' }}
           - variables:
               raise_water: >
                 {{ states(water_helper) | float(0) == 0
