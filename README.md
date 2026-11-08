@@ -105,24 +105,31 @@ Einspeise-Sensor statt dem Kontakt des Wechselrichters.
   unter der Mindest-Einspeisung liegt – so schaltet die Anhebung nicht ab,
   sobald die Wärmepumpe den Überschuss selbst verbraucht. Ob die Wärmepumpe
   läuft, wird nicht geprüft.
-- Kühlt der Boiler während eines Überschusses ab oder startet Home Assistant
-  neu, wird ebenfalls erst nach der Einschaltverzögerung angehoben.
+- Kühlt der Speicher während eines Überschusses ab, wird eine Bedingung
+  erfüllt oder startet Home Assistant neu, wird ebenfalls erst nach der
+  Einschaltverzögerung angehoben. Alle 10 Minuten prüft das Blueprint, ob
+  etwas anzuheben ist, das bisher zurückgehalten wurde.
 - **Brauchwasser**: Ist der Warmwasserspeicher kälter als 52 °C, wird
   Brauchwasser-Soll auf 55 °C gesetzt (beides einstellbar). Gemessen wird wie
   bei der SG-Box am Fühler der Wärmepumpe („Warmwasserspeicher WP“), nicht am
   Boiler-Fühler oben im Speicher, den das Web-Interface anzeigt. Über
   „Speicherfühler“ lässt sich ein anderer Sensor wählen.
-- **Raum** (optional): Raum-Soll wird um 0,5–3 K angehoben, auf Wunsch nur
-  unter eigenen Bedingungen (z. B. Heizperiode, Außentemperatur).
+- **Raum** (optional): Raum-Soll wird um 0,5–3 K angehoben – je nach „Modus
+  Smart Grid“ bei PV, Niedertarif oder beidem, wie bei der SG-Box. Auf Wunsch
+  nur unter eigenen Bedingungen (z. B. Heizperiode, Außentemperatur).
 - **Zusätzliche Bedingungen** (optional): nur anheben, wenn z. B. die Fenster
   geschlossen sind oder jemand zu Hause ist. Das Zurücksetzen prüft sie nicht,
   eine Anhebung wird also immer beendet.
 - **Niedertarif** (optional): ein Schalter oder Binärsensor, der Raum-Soll
   wie bei Überschuss anhebt. Brauchwasser bleibt wie bei der SG-Box
   unverändert – die Wärmepumpe lädt ohnehin selbst.
-- Ein- und Ausschaltverzögerung (Standard 5 / 15 min) verhindern Hin- und
-  Herschalten bei Wolken. Hat jemand den Sollwert während der Anhebung
-  geändert, bleibt dessen Wert stehen.
+- Ein- und Ausschaltverzögerung (Standard 5 / 15 min) und eine Mindestdauer
+  der Anhebung (Standard 30 min) verhindern Hin- und Herschalten bei Wolken.
+  Hat jemand den Sollwert während der Anhebung geändert, bleibt dessen Wert
+  stehen.
+- **Ausfälle**: Liefert der Einspeise-Sensor keinen Wert, wird weder angehoben
+  noch zurückgesetzt. Ist das Modul beim Zurücksetzen nicht erreichbar, wird
+  das nachgeholt, sobald es wieder antwortet.
 - **Benachrichtigung**: beim Anheben und Zurücksetzen, mit Einspeisung,
   aktueller Temperatur und Sollwerten, z. B. „Einspeisung 2480 W.
   Brauchwasser 45,0 °C, Soll 48,0 → 55,0 °C.“ Vorbelegt ist eine

@@ -96,8 +96,8 @@ blueprint:
           description: >
             So lange muss die Einspeisung ununterbrochen über
             Leistungsaufnahme plus Mindest-Einspeisung liegen, bevor angehoben
-            wird – auch wenn der Boiler während des Überschusses abkühlt oder
-            Home Assistant neu startet.
+            wird – auch wenn der Speicher während des Überschusses abkühlt,
+            eine Bedingung erfüllt wird oder Home Assistant neu startet.
           default: 5
           selector:
             number:
@@ -108,13 +108,27 @@ blueprint:
           name: Ausschaltverzögerung
           description: >
             So lange muss die Einspeisung ununterbrochen unter der
-            Mindest-Einspeisung liegen, bevor die Sollwerte zurückgesetzt werden. Bei Wolken nicht
-            zu kurz wählen.
+            Mindest-Einspeisung liegen, bevor die Sollwerte zurückgesetzt
+            werden. Bei Wolken nicht zu kurz wählen.
           default: 15
           selector:
             number:
               min: 1
               max: 120
+              unit_of_measurement: min
+        min_duration:
+          name: Mindestdauer
+          description: >
+            So lange bleibt eine Anhebung mindestens bestehen, auch wenn der
+            Überschuss vorher endet – das verhindert häufiges Ein- und
+            Ausschalten, etwa wenn die Wärmepumpe mehr aufnimmt als
+            angegeben. Zurückgesetzt wird danach, falls der Überschuss dann
+            noch fehlt. 0 = aus.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 180
               unit_of_measurement: min
         cheap_rate:
           name: Niedertarif (optional)
@@ -216,6 +230,22 @@ blueprint:
             entity:
               filter:
                 - domain: input_number
+        room_mode:
+          name: Modus Smart Grid
+          description: >
+            Wobei Raum-Soll angehoben wird – wie der Parameter „Modus Smart
+            Grid“ der SG-Box. Brauchwasser wird unabhängig davon nur bei
+            PV-Überschuss geladen.
+          default: both
+          selector:
+            select:
+              options:
+                - label: PV
+                  value: pv
+                - label: Niedertarif
+                  value: cheap
+                - label: PV oder Niedertarif
+                  value: both
         room_raise:
           name: Anhebung
           description: >
@@ -235,8 +265,9 @@ blueprint:
             z. B. Heizperiode, Außentemperatur unter 15 °C oder Fenster
             geschlossen. Brauchwasser wird davon nicht beeinflusst. Das
             Zurücksetzen prüft sie nicht. Werden sie während eines
-            Überschusses erfüllt, wird beim nächsten Auslöser angehoben. Leer
-            lassen für keine Einschränkung.
+            Überschusses erfüllt, wird spätestens nach 10 Minuten plus
+            Einschaltverzögerung angehoben. Leer lassen für keine
+            Einschränkung.
           default: []
           selector:
             condition: {}
@@ -252,9 +283,9 @@ blueprint:
             geschlossen“, „jemand zu Hause“ oder ein Schalter, der die
             Automation pausiert. Das Zurücksetzen prüft sie nicht – eine
             Anhebung wird also immer beendet. Werden die Bedingungen während
-            eines Überschusses erfüllt, wird beim nächsten Auslöser angehoben
-            (Überschuss beginnt, Boiler kühlt unter die Starttemperatur,
-            Neustart). Leer lassen für keine Einschränkung.
+            eines Überschusses erfüllt, wird spätestens nach 10 Minuten plus
+            Einschaltverzögerung angehoben. Leer lassen für keine
+            Einschränkung.
           default: []
           selector:
             condition: {}
@@ -284,21 +315,24 @@ mode: queued
 max_exceeded: silent
 
 trigger_variables:
+  export_sensor: !input export_sensor
   cheap_rate: !input cheap_rate
   export_sign: !input export_sign
   heat_pump_power: !input heat_pump_power
   water_heater: !input water_heater
+  climate: !input climate
   start_below: !input start_below
   tank_sensor_input: !input tank_sensor
 
 trigger:
-  # Export as a positive number, whatever the sensor's sign convention.
+  # Export as a positive number, whatever the sensor's sign convention. An
+  # unavailable sensor gives no number, so it neither starts nor stops.
   # Start once the heat pump would still leave the minimum export.
   - platform: numeric_state
     entity_id: !input export_sensor
     value_template: >
-      {{ state.state | float(0) * export_sign | int(1)
-         - heat_pump_power | float(0) }}
+      {{ state.state | float * export_sign | int(1) - heat_pump_power | float(0)
+         if state.state | is_number else none }}
     above: !input reserve
     for:
       minutes: !input on_delay
@@ -318,7 +352,9 @@ trigger:
   # Stop below the minimum export; whether the heat pump runs is not checked.
   - platform: numeric_state
     entity_id: !input export_sensor
-    value_template: "{{ state.state | float(0) * export_sign | int(1) }}"
+    value_template: >
+      {{ state.state | float * export_sign | int(1)
+         if state.state | is_number else none }}
     below: !input reserve
     for:
       minutes: !input off_delay
@@ -326,68 +362,92 @@ trigger:
   - platform: template
     value_template: "{{ cheap_rate != '' and is_state(cheap_rate, 'off') }}"
     id: stop
-  - platform: homeassistant
-    event: start
+  # Everything needed is available again: after a restart or an outage of
+  # the module or the export sensor. Catches up on raising and resetting.
+  - platform: template
+    value_template: >
+      {{ states(export_sensor) | is_number
+         and states(water_heater) not in ['unavailable', 'unknown']
+         and (climate == '' or states(climate) not in ['unavailable', 'unknown']) }}
     id: check
+  # Raise what conditions or missed triggers held back.
+  - platform: time_pattern
+    minutes: /10
+    id: periodic
 
 variables:
-  export_sensor: !input export_sensor
   reserve: !input reserve
   on_delay: !input on_delay
-  water_heater: !input water_heater
+  min_duration: !input min_duration
   water_helper: !input water_helper
   boost_temperature: !input boost_temperature
-  start_below: !input start_below
-  climate: !input climate
   room_helper: !input room_helper
   room_raise: !input room_raise
+  room_mode: !input room_mode
   use_room: "{{ climate != '' and room_helper != '' }}"
-  export: "{{ (states(export_sensor) | float(0) * export_sign | int(1)) | round(0) | int }}"
-  export_text: >
-    {{ 'Einspeisung ' ~ export ~ ' W' if export >= 0
-       else 'Netzbezug ' ~ (-export) ~ ' W' }}
-  # While raised, the heat pump already uses its share (see triggers).
-  raised: >
-    {{ states(water_helper) | float(0) > 0
-       or (use_room and states(room_helper) | float(0) > 0) }}
-  surplus_threshold: >
-    {{ reserve if raised else reserve + heat_pump_power | float(0) }}
-  pv_surplus: "{{ export > surplus_threshold }}"
-  surplus: >
-    {{ pv_surplus or (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
   # T_BW_WP like the SG-Box; the water heater shows the upper sensor.
   tank_sensor: >
     {{ tank_sensor_input or device_entities(device_id(water_heater))
        | select('is_state_attr', 'parameter_id', 214) | first | default('') }}
+  # State at the time of the trigger; recomputed after every wait below.
+  export_known: "{{ states(export_sensor) | is_number }}"
+  export: "{{ (states(export_sensor) | float(0) * export_sign | int(1)) | round(0) | int }}"
+  water_raised: "{{ states(water_helper) | float(0) > 0 }}"
+  room_raised: "{{ use_room and states(room_helper) | float(0) > 0 }}"
+  # While raised, the heat pump already uses its share (see triggers).
+  surplus_threshold: >
+    {{ reserve if water_raised or room_raised else reserve + heat_pump_power | float(0) }}
+  cheap_on: "{{ cheap_rate != '' and is_state(cheap_rate, 'on') }}"
+  pv_surplus: "{{ export_known and export > surplus_threshold }}"
+  # Like "Modus Smart Grid"; hot water only ever on PV (SG-Box).
+  room_active: >
+    {{ (pv_surplus and room_mode in ['pv', 'both'])
+       or (cheap_on and room_mode in ['cheap', 'both']) }}
+  water_available: >
+    {{ states(water_heater) not in ['unavailable', 'unknown']
+       and state_attr(water_heater, 'temperature') is number }}
+  room_available: >
+    {{ use_room and states(climate) not in ['unavailable', 'unknown']
+       and state_attr(climate, 'temperature') is number }}
   # 0 or unavailable means unknown.
   water_current: >
     {%- set t = (states(tank_sensor) if tank_sensor
                  else state_attr(water_heater, 'current_temperature')) | float(0) -%}
     {{ t if t > 0 else none }}
-  water_target: "{{ state_attr(water_heater, 'temperature') | float(0) }}"
-  room_current: "{{ state_attr(climate, 'current_temperature') if use_room else none }}"
-  room_target: "{{ state_attr(climate, 'temperature') | float(0) if use_room else 0 }}"
-  room_max: "{{ state_attr(climate, 'max_temp') | float(26) if use_room else 26 }}"
+  can_raise_water: >
+    {{ pv_surplus and not water_raised and water_available
+       and water_current is number and water_current < start_below }}
+  can_raise_room: "{{ room_active and not room_raised and room_available }}"
+  # Resetting needs to know there is no surplus; unknown export waits.
+  water_due: "{{ water_raised and export_known and not pv_surplus }}"
+  room_due: >
+    {{ room_raised and not room_active
+       and (export_known or room_mode == 'cheap') }}
 
 action:
   - choose:
       - alias: Überschuss – anheben
         conditions:
-          - "{{ trigger.id in ['start', 'delayed', 'check'] and surplus }}"
+          - "{{ trigger.id in ['start', 'delayed', 'check', 'periodic'] }}"
+          - "{{ can_raise_water or can_raise_room }}"
           # Raising only; the reset below ignores them.
           - condition: and
             conditions: !input raise_conditions
         sequence:
-          # Boiler cooled down or restart: the surplus has to last for the
-          # on delay as well; give up if it ends meanwhile.
+          # Anything but the export trigger itself: the surplus has to last
+          # for the on delay as well; give up if it ends meanwhile.
           - if:
-              - "{{ trigger.id in ['delayed', 'check'] and on_delay | float(0) > 0 }}"
+              - "{{ trigger.id != 'start' and on_delay | float(0) > 0 }}"
             then:
               - wait_for_trigger:
                   - platform: template
                     value_template: >
-                      {{ states(export_sensor) | float(0) * export_sign | int(1) <= surplus_threshold
-                         and not (cheap_rate != '' and is_state(cheap_rate, 'on')) }}
+                      {%- set e = states(export_sensor) | float(0) * export_sign | int(1) -%}
+                      {%- set pv = states(export_sensor) | is_number and e > surplus_threshold -%}
+                      {%- set cheap = cheap_rate != '' and is_state(cheap_rate, 'on') -%}
+                      {%- set room = (pv and room_mode in ['pv', 'both'])
+                                     or (cheap and room_mode in ['cheap', 'both']) -%}
+                      {{ not ((can_raise_water and pv) or (can_raise_room and room)) }}
                 timeout:
                   minutes: "{{ on_delay }}"
                 continue_on_timeout: true
@@ -395,80 +455,127 @@ action:
                   - "{{ wait.trigger is not none }}"
                 then:
                   - stop: Überschuss während der Einschaltverzögerung beendet
-          - variables:
+          - variables: &now
+              export_known: "{{ states(export_sensor) | is_number }}"
               export: "{{ (states(export_sensor) | float(0) * export_sign | int(1)) | round(0) | int }}"
-              pv_surplus: "{{ export > surplus_threshold }}"
               export_text: >
                 {{ 'Einspeisung ' ~ export ~ ' W' if export >= 0
                    else 'Netzbezug ' ~ (-export) ~ ' W' }}
+              water_raised: "{{ states(water_helper) | float(0) > 0 }}"
+              room_raised: "{{ use_room and states(room_helper) | float(0) > 0 }}"
+              surplus_threshold: >
+                {{ reserve if water_raised or room_raised else reserve + heat_pump_power | float(0) }}
+              cheap_on: "{{ cheap_rate != '' and is_state(cheap_rate, 'on') }}"
+              pv_surplus: "{{ export_known and export > surplus_threshold }}"
+              room_active: >
+                {{ (pv_surplus and room_mode in ['pv', 'both'])
+                   or (cheap_on and room_mode in ['cheap', 'both']) }}
+              water_available: >
+                {{ states(water_heater) not in ['unavailable', 'unknown']
+                   and state_attr(water_heater, 'temperature') is number }}
+              room_available: >
+                {{ use_room and states(climate) not in ['unavailable', 'unknown']
+                   and state_attr(climate, 'temperature') is number }}
+              water_current: >
+                {%- set t = (states(tank_sensor) if tank_sensor
+                             else state_attr(water_heater, 'current_temperature')) | float(0) -%}
+                {{ t if t > 0 else none }}
+              water_target: "{{ state_attr(water_heater, 'temperature') | float(0) }}"
+              room_current: "{{ state_attr(climate, 'current_temperature') if use_room else none }}"
+              room_target: "{{ state_attr(climate, 'temperature') | float(0) if use_room else 0 }}"
+              room_max: "{{ state_attr(climate, 'max_temp') | float(26) if use_room else 26 }}"
           - variables:
-              # Low tariff alone doesn't touch hot water (SG-Box).
               raise_water: >
-                {{ pv_surplus and states(water_helper) | float(0) == 0
+                {{ pv_surplus and not water_raised and water_available
                    and water_current is number and water_current < start_below }}
-              raise_room: "{{ use_room and states(room_helper) | float(0) == 0 }}"
+              raise_room: "{{ room_active and not room_raised and room_available }}"
               room_boost: "{{ [room_target + room_raise, room_max] | min }}"
           - if:
               - "{{ raise_water }}"
             then:
-              - service: input_number.set_value
-                target:
-                  entity_id: "{{ water_helper }}"
-                data:
-                  value: "{{ water_target }}"
               - service: water_heater.set_temperature
                 target:
                   entity_id: "{{ water_heater }}"
                 data:
                   temperature: "{{ boost_temperature }}"
+              # Only once the module took the new setpoint.
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ water_helper }}"
+                data:
+                  value: "{{ water_target }}"
           - if:
               - "{{ raise_room }}"
               - condition: and
                 conditions: !input room_conditions
             then:
-              - service: input_number.set_value
-                target:
-                  entity_id: "{{ room_helper }}"
-                data:
-                  value: "{{ room_target }}"
               - service: climate.set_temperature
                 target:
                   entity_id: "{{ climate }}"
                 data:
                   temperature: "{{ room_boost }}"
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ room_helper }}"
+                data:
+                  value: "{{ room_target }}"
           # The room conditions may have held raising back.
           - variables:
-              room_raised: "{{ raise_room and states(room_helper) | float(0) > 0 }}"
+              room_done: "{{ raise_room and states(room_helper) | float(0) > 0 }}"
           - if:
-              - "{{ raise_water or room_raised }}"
+              - "{{ raise_water or room_done }}"
             then:
               - variables:
                   title: Aerosmart – Überschuss
                   message: >
                     {%- set n = '%.1f' -%}
-                    {{ export_text }}{{ ', Niedertarif' if cheap_rate != '' and is_state(cheap_rate, 'on') }}.
+                    {{ export_text }}{{ ', Niedertarif' if cheap_on }}.
                     {%- if raise_water %}
                     Brauchwasser {{ (n | format(water_current) | replace('.', ',')) if water_current is number else '?' }} °C,
                     Soll {{ water_target | round(1) | string | replace('.', ',') }} → {{ boost_temperature | round(1) | string | replace('.', ',') }} °C.
                     {%- endif %}
-                    {%- if room_raised %}
+                    {%- if room_done %}
                     Raum {{ (n | format(room_current | float(0))) | replace('.', ',') }} °C,
                     Soll {{ room_target | round(1) | string | replace('.', ',') }} → {{ room_boost | round(1) | string | replace('.', ',') }} °C.
                     {%- endif %}
               - sequence: !input notify_action
       - alias: Kein Überschuss – zurücksetzen
         conditions:
-          - "{{ trigger.id in ['stop', 'check'] and not surplus }}"
+          - "{{ trigger.id in ['stop', 'check'] }}"
+          - "{{ water_due or room_due }}"
         sequence:
+          # A boost lasts at least the minimum duration (since the helper
+          # was set, or since the last restart).
           - variables:
+              remaining: >
+                {%- set ns = namespace(r=0) -%}
+                {%- for due, helper in [(water_due, water_helper), (room_due, room_helper)] if due -%}
+                  {%- set age = (now() - states[helper].last_changed).total_seconds() -%}
+                  {%- set ns.r = [ns.r, min_duration | float(0) * 60 - age] | max -%}
+                {%- endfor -%}
+                {{ ns.r | round(0) | int }}
+          - if:
+              - "{{ remaining > 0 }}"
+            then:
+              - delay:
+                  seconds: "{{ remaining }}"
+          - variables: *now
+          - variables:
+              water_due: "{{ water_raised and export_known and not pv_surplus }}"
+              room_due: >
+                {{ room_raised and not room_active
+                   and (export_known or room_mode == 'cheap') }}
+          # Unavailable: keep the helper, the "check" trigger retries.
+          - variables:
+              reset_water: "{{ water_due and water_available }}"
+              reset_room: "{{ room_due and room_available }}"
+              # Only restore if nobody changed the setpoint meanwhile.
               water_before: "{{ states(water_helper) | float(0) }}"
               room_before: "{{ states(room_helper) | float(0) if use_room else 0 }}"
-              # Only restore if nobody changed the setpoint meanwhile.
               restore_water: >
-                {{ water_before > 0
-                   and (water_target - boost_temperature) | abs < 0.1 }}
+                {{ reset_water and (water_target - boost_temperature) | abs < 0.1 }}
               restore_room: >
-                {{ room_before > 0
+                {{ reset_room
                    and (room_target - [room_before + room_raise, room_max] | min) | abs < 0.05 }}
           - if:
               - "{{ restore_water }}"
@@ -479,7 +586,7 @@ action:
                 data:
                   temperature: "{{ water_before }}"
           - if:
-              - "{{ water_before > 0 }}"
+              - "{{ reset_water }}"
             then:
               - service: input_number.set_value
                 target:
@@ -495,7 +602,7 @@ action:
                 data:
                   temperature: "{{ room_before }}"
           - if:
-              - "{{ room_before > 0 }}"
+              - "{{ reset_room }}"
             then:
               - service: input_number.set_value
                 target:
@@ -503,14 +610,14 @@ action:
                 data:
                   value: 0
           - if:
-              - "{{ water_before > 0 or room_before > 0 }}"
+              - "{{ reset_water or reset_room }}"
             then:
               - variables:
                   title: Aerosmart – kein Überschuss mehr
                   message: >
                     {%- set n = '%.1f' -%}
                     {{ export_text }}.
-                    {%- if water_before > 0 %}
+                    {%- if reset_water %}
                     Brauchwasser {{ (n | format(water_current) | replace('.', ',')) if water_current is number else '?' }} °C,
                     {% if restore_water -%}
                     Soll {{ water_target | round(1) | string | replace('.', ',') }} → {{ water_before | round(1) | string | replace('.', ',') }} °C.
@@ -518,7 +625,7 @@ action:
                     Soll {{ water_target | round(1) | string | replace('.', ',') }} °C bleibt (zwischenzeitlich geändert).
                     {%- endif %}
                     {%- endif %}
-                    {%- if room_before > 0 %}
+                    {%- if reset_room %}
                     Raum {{ (n | format(room_current | float(0))) | replace('.', ',') }} °C,
                     {% if restore_room -%}
                     Soll {{ room_target | round(1) | string | replace('.', ',') }} → {{ room_before | round(1) | string | replace('.', ',') }} °C.
