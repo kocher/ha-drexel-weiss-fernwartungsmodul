@@ -142,6 +142,36 @@ Die vorherigen Sollwerte merkt sich das Blueprint in Zahlenwert-Helfern
 (Minimum 0, Maximum 100, Schrittweite 0,1), damit sie einen Neustart
 überstehen – je einen für Brauchwasser und Raum vorher anlegen.
 
+### Anzeigen, ob gerade angehoben ist (optional)
+
+Solange ein Helfer über 0 steht, ist die Anhebung aktiv; er enthält dann den
+Sollwert, der danach wiederhergestellt wird. Zwei Template-Binärsensoren
+machen das sichtbar (Helfernamen anpassen):
+
+```yaml
+template:
+  - binary_sensor:
+      - name: PV-Anhebung Brauchwasser
+        icon: mdi:water-boiler
+        state: "{{ states('input_number.sollwert_brauchwasser') | float(0) > 0 }}"
+        attributes:
+          vorheriger_sollwert: "{{ states('input_number.sollwert_brauchwasser') | float(0) }}"
+      - name: PV-Anhebung Raum
+        icon: mdi:home-thermometer
+        state: "{{ states('input_number.sollwert_raum') | float(0) > 0 }}"
+        attributes:
+          vorheriger_sollwert: "{{ states('input_number.sollwert_raum') | float(0) }}"
+```
+
+Alternativ über Einstellungen → Geräte & Dienste → Helfer → Template →
+Binärsensor, mit der jeweiligen `state`-Zeile als Zustandsvorlage.
+
+- **An, aber Sollwert nicht auf der Ladetemperatur**: jemand hat ihn während
+  der Anhebung geändert; dieser Wert bleibt danach stehen.
+- **An, obwohl der Überschuss schon länger fehlt**: die Mindestdauer läuft
+  noch, das Modul war beim Zurücksetzen nicht erreichbar (wird nachgeholt)
+  oder der Einspeise-Sensor liefert keinen Wert.
+
 ## Benachrichtigung bei Störungen und Informationen (Blueprint)
 
 Das Blueprint **Aerosmart Meldungen** schickt eine Nachricht, sobald die
