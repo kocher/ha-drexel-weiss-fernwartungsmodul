@@ -143,6 +143,11 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         except ValueError as err:
             raise UpdateFailed(str(err)) from err
 
+        # Right after a restart the module answers before it has read the devices:
+        # every value is empty. Keep the entities unavailable instead of showing 0.
+        if all(value is None for value in values.values()):
+            raise UpdateFailed("Das Fernwartungsmodul liefert noch keine Werte")
+
         # An empty payload means "no messages", anything else is a problem.
         return DrexelData(
             values=values,
