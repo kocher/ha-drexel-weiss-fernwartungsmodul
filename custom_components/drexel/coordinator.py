@@ -78,6 +78,8 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         self._write_lock = asyncio.Lock()
         # Registry id of the module's device, set during setup.
         self.hub_device_id: str | None = None
+        # Set after a failed poll: the first answer of a restarted module is untrusted.
+        self._recovering = False
 
     def environment_parameter(self, parameter_id: int) -> Parameter | None:
         """The environment-wide control of a parameter (e.g. Raum-Soll)."""
@@ -134,6 +136,19 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         )
 
     async def _async_update_data(self) -> DrexelData:
+        try:
+            data = await self._async_fetch_data()
+        except UpdateFailed:
+            self._recovering = True
+            raise
+        if self._recovering:
+            # A module that just restarted reports 0 for everything it has not read
+            # from the devices yet. Skip that answer; the next poll has real values.
+            self._recovering = False
+            raise UpdateFailed("Das Fernwartungsmodul startet noch, Werte folgen")
+        return data
+
+    async def _async_fetch_data(self) -> DrexelData:
         values_payload = await self._async_get_json(self._area_url("values"))
         errors = await self._async_get_json(self._area_url("errors"))
         informations = await self._async_get_json(self._area_url("informations"))
@@ -142,11 +157,6 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
             values = parse_values(values_payload)
         except ValueError as err:
             raise UpdateFailed(str(err)) from err
-
-        # Right after a restart the module answers before it has read the devices:
-        # every value is empty. Keep the entities unavailable instead of showing 0.
-        if all(value is None for value in values.values()):
-            raise UpdateFailed("Das Fernwartungsmodul liefert noch keine Werte")
 
         # An empty payload means "no messages", anything else is a problem.
         return DrexelData(
