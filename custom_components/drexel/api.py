@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -101,6 +102,43 @@ def parse_values(payload: Any) -> dict[int, Any]:
     except (KeyError, IndexError, TypeError, AttributeError) as err:
         raise ValueError("Unerwartete Antwort vom Aerosmart-Fernwartungsmodul") from err
     return {parameter_id: value for parameter_id, (_, value) in newest.items()}
+
+
+_TICKS_EPOCH = datetime(1, 1, 1)
+
+
+def module_uptime(payload: Any) -> timedelta | None:
+    """How long the module has been collecting values, on its own clock.
+
+    After a restart the module rebuilds ``area=values`` from scratch: every row
+    carries a ``timeStamp`` from after the restart, and for a minute or two
+    parameters it has not read from the devices yet report 0. The envelope's
+    ``ticks`` (.NET ticks, local time) is the module's current time, so the
+    distance to the oldest row is its uptime. None if either is missing.
+    """
+    if not isinstance(payload, list) or not payload or not isinstance(payload[0], dict):
+        return None
+    ticks = payload[0].get("ticks")
+    if not isinstance(ticks, int):
+        return None
+    oldest: datetime | None = None
+    for device in _device_blocks(payload):
+        for item in device.get("values") or []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                stamp = datetime.fromisoformat(item["timeStamp"]).replace(tzinfo=None)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if oldest is None or stamp < oldest:
+                oldest = stamp
+    if oldest is None:
+        return None
+    try:
+        now = _TICKS_EPOCH + timedelta(microseconds=ticks // 10)
+    except OverflowError:
+        return None
+    return now - oldest
 
 
 def parse_device_values(payload: Any) -> dict[int, dict[int, Any]]:

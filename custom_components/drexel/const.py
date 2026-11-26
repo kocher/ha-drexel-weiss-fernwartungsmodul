@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from homeassistant.components.number import NumberDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass
@@ -32,6 +33,10 @@ CONF_SCAN_INTERVAL = "scan_interval"
 DEFAULT_PORT = 334
 DEFAULT_PATH = "/dw"
 SCAN_INTERVAL_SECONDS = 60
+
+# After its nightly restart the module reports 0 for about 80 s until it has
+# read the devices; ignore its answers until it has been up this long.
+STARTUP_GRACE = timedelta(minutes=3)
 
 # The web UI polls lastchanges once per second, ten times, to confirm a write.
 WRITE_CONFIRM_ATTEMPTS = 10

@@ -313,5 +313,33 @@ class TestDeviceValues(unittest.TestCase):
         )
 
 
+class TestUptime(unittest.TestCase):
+    # 2026-11-26 00:11:41 local, the answer that still reported 0 after the restart.
+    TICKS = 639312487010000000
+
+    def payload(self, *stamps, ticks=TICKS):
+        rows = [
+            {"rowId": i, "parameterId": 1000 + i, "currentValue": 0, "timeStamp": stamp}
+            for i, stamp in enumerate(stamps)
+        ]
+        return [{"key": 100, "identifier": "abc", "ticks": ticks,
+                 "value": [{"hardwareId": 130, "hardwareEnvironment": 100, "values": rows}]}]
+
+    def test_since_oldest_row(self):
+        uptime = api.module_uptime(
+            self.payload("2026-11-26T00:11:21+01:00", "2026-11-26T00:10:27+01:00")
+        )
+        self.assertEqual(uptime.total_seconds(), 74)
+
+    def test_long_running(self):
+        uptime = api.module_uptime(self.payload("2026-11-25T00:03:00+01:00"))
+        self.assertGreater(uptime.total_seconds(), 86000)
+
+    def test_unknown(self):
+        self.assertIsNone(api.module_uptime([]))
+        self.assertIsNone(api.module_uptime(self.payload("2026-11-26T00:10:27+01:00", ticks=None)))
+        self.assertIsNone(api.module_uptime(self.payload(None, "kaputt")))
+
+
 if __name__ == "__main__":
     unittest.main()

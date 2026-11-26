@@ -26,6 +26,7 @@ from .api import (
     build_parameters,
     has_informations,
     index_languages,
+    module_uptime,
     language_code,
     parameter_owners,
     newest_row,
@@ -35,7 +36,12 @@ from .api import (
     parse_values,
     write_body,
 )
-from .const import DOMAIN, WRITE_CONFIRM_ATTEMPTS, WRITE_CONFIRM_INTERVAL
+from .const import (
+    DOMAIN,
+    STARTUP_GRACE,
+    WRITE_CONFIRM_ATTEMPTS,
+    WRITE_CONFIRM_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -78,7 +84,7 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
         self._write_lock = asyncio.Lock()
         # Registry id of the module's device, set during setup.
         self.hub_device_id: str | None = None
-        # Set after a failed poll: the first answer of a restarted module is untrusted.
+        # Set after a failed poll: without an uptime the next answer is untrusted.
         self._recovering = False
 
     def environment_parameter(self, parameter_id: int) -> Parameter | None:
@@ -137,19 +143,28 @@ class DrexelCoordinator(DataUpdateCoordinator[DrexelData]):
 
     async def _async_update_data(self) -> DrexelData:
         try:
-            data = await self._async_fetch_data()
+            return await self._async_fetch_data()
         except UpdateFailed:
             self._recovering = True
             raise
-        if self._recovering:
-            # A module that just restarted reports 0 for everything it has not read
-            # from the devices yet. Skip that answer; the next poll has real values.
-            self._recovering = False
-            raise UpdateFailed("Das Fernwartungsmodul startet noch, Werte folgen")
-        return data
 
     async def _async_fetch_data(self) -> DrexelData:
         values_payload = await self._async_get_json(self._area_url("values"))
+
+        # A module that just restarted reports 0 for everything it has not read
+        # from the devices yet, for about 80 s after its first value.
+        recovering, self._recovering = self._recovering, False
+        uptime = module_uptime(values_payload)
+        if uptime is not None:
+            if uptime < STARTUP_GRACE:
+                raise UpdateFailed(
+                    "Das Fernwartungsmodul startet noch "
+                    f"(seit {int(uptime.total_seconds())} s), Werte folgen"
+                )
+        elif recovering:
+            # Uptime unknown: at least skip the first answer after a failure.
+            raise UpdateFailed("Das Fernwartungsmodul startet noch, Werte folgen")
+
         errors = await self._async_get_json(self._area_url("errors"))
         informations = await self._async_get_json(self._area_url("informations"))
 

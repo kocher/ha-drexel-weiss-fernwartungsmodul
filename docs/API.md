@@ -23,7 +23,8 @@ Almost every area returns a list of *environment* blocks:
 
 - `key`: hardware environment (`100`, `200`, ...). A device belongs to
   environment `100 * trunc(hardwareId / 100)`.
-- `identifier`: a new GUID on every response. `ticks` are .NET ticks.
+- `identifier`: a new GUID on every response. `ticks` are .NET ticks of the
+  module's current local time (100 ns since 0001-01-01).
 - `value`: the area payload. For per-device areas it is a list of
   `{"hardwareId": 130, "hardwareEnvironment": 100, ...}` objects.
 
@@ -61,6 +62,15 @@ areas return `[]`.
 
 `hardware`, `errors` and `icons` are flagged in the UI as areas that may carry
 errors (`hasErrors`).
+
+### Nightly restart
+
+The module restarts around midnight (refused connections or a malformed answer
+for a minute or two). Afterwards it rebuilds `values` from scratch: `rowId`s
+start again near 0 and every row's `timeStamp` dates from after the restart.
+For roughly 80 s after the first row, parameters it has not yet read from the
+devices report `currentValue: 0`, not `null`. Since no row is older than the
+restart, `ticks` minus the oldest `timeStamp` (both module clock) is its uptime.
 
 ### Feature object (`options`, `betriebsart`, `tempconfig`)
 
